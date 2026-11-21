@@ -2,10 +2,6 @@
 
 > **Open-Source Linear Biomimetic Actuator** — дешёвый, бесшумный безредукторный линейный привод для антропоморфных робо-рук и бионических протезов (себестоимость одного канала < 800 ₽ / \$8, нулевое энергопотребление при удержании груза).
 
-![Status](https://shields.io)
-![Hardware License](https://shields.io)
-![Software License](https://shields.io)
-
 ---
 DOI  https://zenodo.org/records/24428218
 
