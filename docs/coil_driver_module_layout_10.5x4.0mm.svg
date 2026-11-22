@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="260mm" height="135mm" viewBox="0 0 260 135">
+  <rect x="0" y="0" width="260" height="135" fill="#ffffff"/>
+  <text x="10" y="11" font-family="Arial, sans-serif" font-size="4.8" font-weight="bold" fill="#0f172a">
+    Компоновка интегрированного модуля управления (10,5 × 4,0 мм, двухсторонний монтаж)
+  </text>
+
+  <!-- СТОРОНА А (ВЕРХ) -->
+  <text x="10" y="20" font-family="Arial, sans-serif" font-size="3.8" font-weight="bold" fill="#1d4ed8">
+    Сторона А (Верх): силовая коммутация и диод свободного хода
+  </text>
+  <!-- Плата 105 x 40 (масштаб 10:1 -> 10.5 x 4.0 мм), x=15..120, y=24..64 -->
+  <rect x="15" y="24" width="105" height="40" rx="1.5" fill="#dcfce7" stroke="#15803d" stroke-width="0.7"/>
+
+  <!-- Контактные площадки слева -->
+  <rect x="17" y="27" width="10" height="8" fill="#facc15" stroke="#854d0e" stroke-width="0.4"/>
+  <text x="22" y="32" font-family="Arial, sans-serif" font-size="2.6" font-weight="bold" text-anchor="middle" fill="#0f172a">+12V</text>
+
+  <rect x="17" y="45" width="10" height="7" fill="#facc15" stroke="#854d0e" stroke-width="0.4"/>
+  <text x="22" y="49.5" font-family="Arial, sans-serif" font-size="2.6" font-weight="bold" text-anchor="middle" fill="#0f172a">PWM</text>
+
+  <!-- Диод D1 SS34A (SMA: 5.2 x 2.8 мм -> 52 x 28), x=42..94, y=26..40 -->
+  <rect x="44" y="26.5" width="46" height="14" fill="#334155" stroke="#0f172a" stroke-width="0.5"/>
+  <rect x="44" y="26.5" width="6" height="14" fill="#cbd5e1"/>
+  <text x="69" y="34.5" font-family="Arial, sans-serif" font-size="3" fill="#ffffff" text-anchor="middle">D1: SS34A (SMA)</text>
+  <line x1="27" y1="31" x2="44" y2="31" stroke="#dc2626" stroke-width="1.2"/>
+
+  <!-- Резистор Rg 47R (0603) -->
+  <rect x="31" y="46" width="14" height="6" fill="#1e293b" stroke="#0f172a" stroke-width="0.4"/>
+  <text x="38" y="50" font-family="Arial, sans-serif" font-size="2.4" fill="#ffffff" text-anchor="middle">Rg 47R</text>
+  <line x1="27" y1="48.5" x2="31" y2="48.5" stroke="#2563eb" stroke-width="0.8"/>
+
+  <!-- Резистор Rpd 100k (0603) -->
+  <rect x="48" y="55" width="14" height="6" fill="#1e293b" stroke="#0f172a" stroke-width="0.4"/>
+  <text x="55" y="59" font-family="Arial, sans-serif" font-size="2.3" fill="#ffffff" text-anchor="middle">Rpd 100k</text>
+
+  <!-- MOSFET Q1 NCE3400X (SOT-23) -->
+  <rect x="66" y="44" width="24" height="16" fill="#0f172a" stroke="#000000" stroke-width="0.5"/>
+  <text x="78" y="53" font-family="Arial, sans-serif" font-size="2.7" fill="#ffffff" text-anchor="middle">Q1 NCE3400X</text>
+  <line x1="45" y1="49" x2="66" y2="49" stroke="#2563eb" stroke-width="0.8"/>
+  <line x1="55" y1="49" x2="55" y2="55" stroke="#2563eb" stroke-width="0.6"/>
+
+  <!-- Переходное отверстие Source -> Низ -->
+  <circle cx="95" cy="56" r="2.2" fill="#facc15" stroke="#0f172a" stroke-width="0.5"/>
+  <line x1="90" y1="56" x2="93" y2="56" stroke="#16a34a" stroke-width="1"/>
+  <text x="95" y="62" font-family="Arial, sans-serif" font-size="2.2" text-anchor="middle" fill="#0f172a">Via Src</text>
+
+  <!-- Площадка COIL- справа -->
+  <rect x="106" y="29" width="12" height="12" fill="#facc15" stroke="#854d0e" stroke-width="0.4"/>
+  <text x="112" y="36" font-family="Arial, sans-serif" font-size="2.5" font-weight="bold" text-anchor="middle" fill="#0f172a">COIL-</text>
+  <line x1="90" y1="33" x2="106" y2="33" stroke="#ea580c" stroke-width="1.2"/>
+  <line x1="90" y1="47" x2="108" y2="47" stroke="#ea580c" stroke-width="1"/>
+  <line x1="108" y1="47" x2="108" y2="41" stroke="#ea580c" stroke-width="1"/>
+
+  <!-- СТОРОНА Б (НИЗ - прилегает к кольцу через каптон) -->
+  <text x="135" y="20" font-family="Arial, sans-serif" font-size="3.8" font-weight="bold" fill="#b45309">
+    Сторона Б (Низ): шунт Rsh 2512 и Kelvin-отводы
+  </text>
+  <rect x="138" y="24" width="105" height="40" rx="1.5" fill="#fef3c7" stroke="#b45309" stroke-width="0.7"/>
+
+  <!-- Шунт Rsh 2512 (6.35 x 3.2 мм -> 63.5 x 32), x=156..220, y=28..60 -->
+  <rect x="156" y="28" width="64" height="32" fill="#1e293b" stroke="#0f172a" stroke-width="0.6"/>
+  <rect x="156" y="28" width="11" height="32" fill="#eab308"/>
+  <rect x="209" y="28" width="11" height="32" fill="#eab308"/>
+  <text x="188" y="45" font-family="Arial, sans-serif" font-size="3.2" font-weight="bold" fill="#ffffff" text-anchor="middle">
+    Rsh 0,10 Ω (2512, 1 Вт)
+  </text>
+
+  <!-- Kelvin ADC+ и ADC- -->
+  <rect x="140" y="27" width="11" height="7" fill="#93c5fd" stroke="#1d4ed8" stroke-width="0.4"/>
+  <text x="145.5" y="31.5" font-family="Arial, sans-serif" font-size="2.3" font-weight="bold" text-anchor="middle" fill="#0f172a">ADC+</text>
+  <line x1="151" y1="30.5" x2="156" y2="30.5" stroke="#1d4ed8" stroke-width="0.6"/>
+
+  <rect x="140" y="53" width="11" height="7" fill="#93c5fd" stroke="#1d4ed8" stroke-width="0.4"/>
+  <text x="145.5" y="57.5" font-family="Arial, sans-serif" font-size="2.3" font-weight="bold" text-anchor="middle" fill="#0f172a">ADC-</text>
+  <polyline points="151,56.5 168,62 212,62 212,60" fill="none" stroke="#1d4ed8" stroke-width="0.6"/>
+
+  <!-- Пайка к медному кольцу справа -->
+  <rect x="225" y="32" width="15" height="24" fill="#fdba74" stroke="#9a3412" stroke-width="0.6"/>
+  <text x="232.5" y="43" font-family="Arial, sans-serif" font-size="2.5" font-weight="bold" text-anchor="middle" fill="#7c2d12">ПАЙКА</text>
+  <text x="232.5" y="47" font-family="Arial, sans-serif" font-size="2.5" font-weight="bold" text-anchor="middle" fill="#7c2d12">К КОЛЬЦУ</text>
+  <line x1="220" y1="44" x2="225" y2="44" stroke="#9a3412" stroke-width="1.5"/>
+
+  <!-- Пояснение по изоляции -->
+  <rect x="10" y="72" width="240" height="54" rx="2" fill="#f8fafc" stroke="#cbd5e1" stroke-width="0.5"/>
+  <text x="14" y="79" font-family="Arial, sans-serif" font-size="3.6" font-weight="bold" fill="#0f172a">
+    Ключевые правила сборки и защиты от ошибок (по п. 4 и п. 8 спецификации):
+  </text>
+  <text x="14" y="86" font-family="Arial, sans-serif" font-size="3.2" fill="#334155">
+    1. Размеры платки 10,5 × 4,0 мм выбраны для размещения корпусов 2512 + SMA + SOT-23 + 0603 по касательной в зазоре 4,0 мм между катушками.
+  </text>
+  <text x="14" y="93" font-family="Arial, sans-serif" font-size="3.2" fill="#334155">
+    2. Вся нижняя плоскость Стороны Б изолируется от медного кольца слоем каптонового скотча 0,05 мм, КРОМЕ правой площадки (пайка GND после шунта).
+  </text>
+  <text x="14" y="100" font-family="Arial, sans-serif" font-size="3.2" fill="#334155">
+    3. Измерительные линии Kelvin (ADC+ и ADC-) подключаются строго к внутренним краям площадок шунта 2512 — силовой ток 2,15 А не течёт по дорожкам АЦП.
+  </text>
+  <text x="14" y="107" font-family="Arial, sans-serif" font-size="3.2" fill="#334155">
+    4. При замене сгоревшего модуля отпаиваются 4 точки (+12V, PWM, ADC+, COIL-) и точка на кольце, затем кольцо расстёгивается без разборки трубки PTFE.
+  </text>
+  <text x="14" y="114" font-family="Arial, sans-serif" font-size="3.2" fill="#334155">
+    5. До установки на волокно модуль полностью проверяется на столе (подача +12 В, проверка фронтов PWM и падения напряжения на шунте 0,10 Ом).
+  </text>
+</svg>
