@@ -1,0 +1,496 @@
+﻿<html>
+<head>
+    <title>Move Phase Emulator</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        #mainHolder {
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            position: absolute;
+            margin: 0;
+            padding: 0;
+            left: 0;
+            top: 0;
+        }
+
+        #paramsHolder {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(125px, max-content) 65px);
+            gap: 6px 14px;
+            padding: 10px 14px;
+            background-color: #262626;
+            color: #d4d4d4;
+            font-family: sans-serif;
+            font-size: 13px;
+            align-items: center;
+            grid-row: 1;
+            grid-column: 1;
+            border-bottom: 1px solid #404040;
+        }
+
+        #cvsDisplay {
+            display: block;
+            background-color: black;
+            place-self: normal normal;
+            width: 100%;
+            height: 100%;
+        }
+        .cvsWrapper {
+            grid-row: 2;
+            grid-column: 1;
+            min-height: 0;
+            min-width: 0;
+        }
+        #resultsHolder {
+            display: grid;
+            grid-row: 3;
+            grid-column: 1;
+            place-self: normal normal;
+            grid-template-columns: 1fr;
+            background-color: #333;
+            padding:5px;
+        }
+        #paramsHolder input {
+            width: 100%;
+            padding: 2px 4px;
+            background: #333;
+            color: #DDD;
+            border: 1px solid #555;
+            border-radius: 3px;
+        }
+        #paramsHolder label {
+            padding: 2px 4px;
+            margin-left:5px;
+            color: #AAA;
+        }
+    </style>
+</head>
+<body>
+    <div id="mainHolder">
+        <div id="paramsHolder"></div>
+        <div class="cvsWrapper">
+            <canvas id="cvsDisplay"></canvas>
+        </div>
+
+        <div id="resultsHolder"></div>
+    </div>
+    <script>
+        const paramsHolder = document.getElementById('paramsHolder');
+        const cvsDisplay = document.getElementById('cvsDisplay');
+        const resultsHolder = document.getElementById('resultsHolder');
+        const cvsWrapper = document.querySelector('.cvsWrapper');
+        const sldProgress = document.createElement('input');
+        const infoPanel = document.createElement('div'); // Панель вывода сил в #resultsHolder
+        const ctx = cvsDisplay.getContext('2d');
+
+        const params = {
+            tubeWidth: { value: 106.0, label: 'Длина трубки', step: 1, min: 10, isInt: false },
+            tubeOutHeight: { value: 6.0, label: 'Внеш. D трубки', step: 0.1, min: 1, isInt: false },
+            tubeInHeight: { value: 5.2, label: 'Внутр. D трубки', step: 0.1, min: 1, isInt: false },
+            coilsCount: { value: 5, label: 'Кол-во катушек', step: 1, min: 1, isInt: true },
+            coilWidth: { value: 17, label: 'Ширина катушки', step: 0.5, min: 1, isInt: false },
+            coilWireSize: { value: 0.18, label: 'Диаметр провода', step: 0.01, min: 0.01, isInt: false },
+            coilWireLayers: { value: 4, label: 'Слоев намотки', step: 1, min: 1, isInt: true },
+            coilStep: { value: 4, label: 'Шаг катушек', step: 0.5, min: 0, isInt: false },
+            coilOffset: { value: 2, label: 'Отступ катушек', step: 0.5, min: 0, isInt: false },
+            anchorsHeight: { value: 5, label: 'Диаметр якоря', step: 0.1, min: 1, isInt: false },
+            anchorsCount: { value: 3, label: 'Кол-во якорей', step: 1, min: 1, isInt: true },
+            anchorsOffset: { value: 0, label: 'Нач. отступ якоря', step: 0.5, min: 0, isInt: false },
+            anchorsStep: { value: 0.8, label: 'Зазор меж якорями', step: 0.1, min: 0, isInt: false },
+            anchorsWidth: { value: 20.2, label: 'Длина якоря', step: 0.5, min: 1, isInt: false }
+        };
+
+        let Coils = [];
+        let Anchors = [];
+
+        // Главный словарь фаз: ключ = integer value слайдера (0..maxOffset)
+        let phasesData = {};
+
+        sldProgress.type = 'range';
+        sldProgress.min = 0;
+        sldProgress.step = 1;
+        sldProgress.value = 0;
+
+        // 1. Расчет условной силы тяги от одной катушки на один железный сердечник (в долях от -1 до +1)
+        function calcSingleCoilForce(coil, anchorOffset, anchorWidth, coilPower) {
+            if (!coilPower || coilPower === 0) return 0;
+
+            const coilCenter = coil.Offset + coil.Width / 2;
+            const anchorCenter = anchorOffset + anchorWidth / 2;
+
+            // Вектор к центру катушки: > 0 тянет вправо, < 0 тянет влево
+            const dx = coilCenter - anchorCenter;
+
+            // Характерная зона магнитного взаимодействия
+            const activeSpan = (coil.Width + anchorWidth) / 2;
+
+            // За пределами 1.5 зон взаимодействия поле считаем пренебрежимо малым
+            if (Math.abs(dx) > activeSpan * 1.5) return 0;
+
+            const norm = dx / activeSpan;
+
+            // Плавная кривая тяги: 0 в центре катушки, пик (±1.0) на входе/выходе, затухание вдали
+            const rawForce = (Math.sin(norm * Math.PI) * Math.exp(-norm * norm)) / 0.72;
+
+            // Железный сердечник притягивается независимо от полярности тока, поэтому Math.abs(coilPower)
+            return rawForce * Math.abs(coilPower);
+        }
+
+        // 2. Пересчет сил для конкретной фазы (можно вызывать при ручном изменении мощности катушек)
+        function recalculatePhase(phaseKey) {
+            const phase = phasesData[phaseKey];
+            if (!phase) return;
+
+            // 1. Группируем соприкасающиеся сердечники в единые блоки (кластеры)
+            const mergedGroups = [];
+            const EPSILON = 0.001; // Допуск на погрешность float
+
+            for (let i = 0; i < phase.anchors.length; i++) {
+                const curr = phase.anchors[i];
+
+                if (mergedGroups.length === 0) {
+                    mergedGroups.push({
+                        ids: [curr.id],
+                        offset: curr.offset,
+                        width: curr.width,
+                        height: curr.height,
+                        force: 0
+                    });
+                } else {
+                    const lastGroup = mergedGroups[mergedGroups.length - 1];
+                    const lastEnd = lastGroup.offset + lastGroup.width;
+
+                    // Проверяем, сомкнулся ли текущий сердечник с предыдущим
+                    if (Math.abs(lastEnd - curr.offset) <= EPSILON) {
+                        lastGroup.ids.push(curr.id);
+                        lastGroup.width += curr.width; // Объединяем в один длинный сердечник
+                    } else {
+                        mergedGroups.push({
+                            ids: [curr.id],
+                            offset: curr.offset,
+                            width: curr.width,
+                            height: curr.height,
+                            force: 0
+                        });
+                    }
+                }
+            }
+
+            // 2. Считаем силу тяги для каждого получившегося (одиночного или составного) сердечника
+            let totalSystemForce = 0;
+
+            mergedGroups.forEach(group => {
+                let netForce = 0;
+                for (let c = 0; c < Coils.length; c++) {
+                    const power = phase.coilPowers[c] ?? 1.0;
+                    // Считаем тягу катушки для единого стержня длиной group.width
+                    netForce += calcSingleCoilForce(Coils[c], group.offset, group.width, power);
+                }
+                group.force = Math.max(-1, Math.min(1, Number(netForce.toFixed(3))));
+                totalSystemForce += group.force;
+            });
+
+            // Сохраняем объединенные группы прямо в объект фазы
+            phase.mergedAnchors = mergedGroups;
+            phase.totalSystemForce = Number(totalSystemForce.toFixed(3));
+        }
+
+
+        // 3. Предрасчет словаря для ВСЕХ возможных позиций слайдера
+        function buildAllPhases() {
+            const oldPhases = phasesData; // Сохраняем старые настройки мощностей катушек, если были
+            phasesData = {};
+
+            const maxStep = parseInt(sldProgress.max, 10);
+
+            for (let step = 0; step <= maxStep; step++) {
+                // Берем сохраненный массив мощностей для этой фазы или ставим 1.0 (100%) всем катушкам
+                const savedPowers = oldPhases[step]?.coilPowers;
+                const coilPowers = Array.from({ length: Coils.length }, (_, idx) =>
+                    savedPowers && savedPowers[idx] !== undefined ? savedPowers[idx] : 1.0
+                );
+
+                // Вычисляем координаты якорей с учетом упора в правый край трубки
+                let moveLim = params.tubeWidth.value;
+                const phaseAnchors = new Array(Anchors.length);
+
+                for (let i = Anchors.length - 1; i >= 0; --i) {
+                    moveLim -= Anchors[i].Width;
+                    let pos = Anchors[i].StartOffset + step;
+                    if (pos > moveLim) pos = moveLim;
+
+                    phaseAnchors[i] = {
+                        id: Anchors[i].Id,
+                        offset: pos,
+                        width: Anchors[i].Width,
+                        height: Anchors[i].Height,
+                        force: 0
+                    };
+                }
+
+                phasesData[step] = {
+                    offset: step,
+                    coilPowers: coilPowers,
+                    anchors: phaseAnchors,
+                    totalSystemForce: 0
+                };
+
+                // Считаем силы для этой фазы
+                recalculatePhase(step);
+            }
+        }
+
+        // Вспомогательная функция: изменить мощность конкретной катушки в конкретной фазе
+        function setCoilPowerInPhase(phaseKey, coilIndex, powerValue) {
+            if (phasesData[phaseKey] && phasesData[phaseKey].coilPowers[coilIndex] !== undefined) {
+                phasesData[phaseKey].coilPowers[coilIndex] = Math.max(-1, Math.min(1, powerValue));
+                recalculatePhase(phaseKey);
+                if (parseInt(sldProgress.value, 10) === phaseKey) {
+                    applyPhase(phaseKey);
+                }
+            }
+        }
+
+        function buildForm() {
+            paramsHolder.innerHTML = '';
+            for (const key in params) {
+                const item = params[key];
+                const label = document.createElement('label');
+                label.textContent = item.label + ':';
+                label.htmlFor = 'param_' + key;
+
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.id = 'param_' + key;
+                input.value = item.value;
+                input.step = item.step;
+                if (item.min !== undefined) input.min = item.min;
+
+                input.addEventListener('input', function () {
+                    const parsed = item.isInt ? parseInt(this.value, 10) : parseFloat(this.value);
+                    if (!isNaN(parsed)) {
+                        params[key].value = parsed;
+                        resetParams();
+                        buildAllPhases();
+                        applyPhase(parseInt(sldProgress.value, 10));
+                    }
+                });
+
+                paramsHolder.appendChild(label);
+                paramsHolder.appendChild(input);
+            }
+        }
+
+        function init() {
+            infoPanel.style.cssText = 'color: #e5e5e5; font-family: monospace; font-size: 13px; margin-bottom: 6px; display: flex; gap: 20px; flex-wrap: wrap;';
+            resultsHolder.appendChild(infoPanel);
+            resultsHolder.appendChild(sldProgress);
+
+            new ResizeObserver(entries => {
+                const { width, height } = entries[0].contentRect;
+                cvsDisplay.width = Math.floor(width);
+                cvsDisplay.height = Math.floor(height);
+                draw(parseInt(sldProgress.value, 10));
+            }).observe(cvsWrapper);
+        }
+
+        function resetParams() {
+            Coils = [];
+            Anchors = [];
+
+            const maxOffset = params.tubeWidth.value - params.anchorsCount.value * params.anchorsWidth.value;
+            sldProgress.max = Math.max(0, Math.ceil(maxOffset));
+            if (parseInt(sldProgress.value, 10) > sldProgress.max) {
+                sldProgress.value = sldProgress.max;
+            }
+
+            const coilH = params.tubeOutHeight.value + params.coilWireSize.value * params.coilWireLayers.value * 2;
+            let offset = params.coilOffset.value;
+            for (let i = 0; i < params.coilsCount.value; ++i) {
+                Coils.push({
+                    Id: i + 1,
+                    Height: coilH,
+                    Width: params.coilWidth.value,
+                    Offset: offset
+                });
+                offset += params.coilWidth.value + params.coilStep.value;
+            }
+
+            offset = params.anchorsOffset.value;
+            for (let i = 0; i < params.anchorsCount.value; ++i) {
+                Anchors.push({
+                    Id: i + 1,
+                    Height: params.anchorsHeight.value,
+                    Width: params.anchorsWidth.value,
+                    Offset: offset,
+                    StartOffset: offset
+                });
+                offset += params.anchorsWidth.value + params.anchorsStep.value;
+            }
+        }
+
+        // Применение готовой фазы из словаря phasesData
+        function applyPhase(phaseKey) {
+            const phase = phasesData[phaseKey];
+            if (!phase) return;
+
+            // Обновляем координаты отдельных сегментов
+            for (let i = 0; i < Anchors.length; i++) {
+                Anchors[i].Offset = phase.anchors[i].offset;
+            }
+            draw(phaseKey);
+        }
+        function drawRect(x, y, width, height, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, width, height);
+        }
+        function drawTextWithBg(text, x, y, textColor, bgColor = 'rgba(120, 120, 120, 0.5)', paddingX = 6, paddingY = 3) {
+            ctx.save();
+
+            // Настраиваем шрифт и выравнивание по центру
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // Измеряем ширину текста в пикселях
+            const metrics = ctx.measureText(text);
+            const textWidth = metrics.width;
+            const textHeight = 14; // Примерная высота для шрифта 12px
+
+            // Считаем координаты и размеры прямоугольника подложки
+            const boxWidth = textWidth + paddingX * 2;
+            const boxHeight = textHeight + paddingY * 2;
+            const boxX = x - boxWidth / 2;
+            const boxY = y - boxHeight / 2;
+
+            // 1. Рисуем серую подложку (со скругленными углами через roundRect)
+            ctx.fillStyle = bgColor;
+            ctx.beginPath();
+            ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 4); // 4 — радиус скругления
+            ctx.fill();
+
+            // 2. Рисуем сам текст поверх подложки
+            ctx.fillStyle = textColor;
+            ctx.fillText(text, x, y);
+
+            ctx.restore();
+        }
+        // Сила взаимодействия между левым (leftA) и правым (rightA) сердечниками
+        function calcPairInteraction(leftA, rightA, couplingCoef = 0.5) {
+            const gap = Math.max(0.1, rightA.offset - (leftA.offset + leftA.width));
+
+            // Если сердечники далеко друг от друга (например, дальше 15 мм), взаимодействие ничтожно
+            if (gap > 15) return 0;
+
+            // Произведение намагниченностей: > 0 (притяжение), < 0 (отталкивание)
+            const magProduct = leftA.magnetization * rightA.magnetization;
+
+            // Обратно пропорционально квадрату зазора (сглаженному, чтобы не уходило в бесконечность при gap -> 0)
+            const distanceFactor = 1 / Math.pow(1 + gap / 2, 2);
+
+            // Положительное значение = притяжение (сближает их)
+            // Отрицательное значение = отталкивание (расталкивает их)
+            return magProduct * distanceFactor * couplingCoef;
+        }
+
+        // Возвращает индуцированную намагниченность сердечника (от -1 до +1)
+        function calcAnchorMagnetization(anchor, phase) {
+            let mag = 0;
+            const aStart = anchor.offset;
+            const aEnd = anchor.offset + anchor.width;
+
+            for (let c = 0; c < Coils.length; c++) {
+                const power = phase.coilPowers[c] ?? 0;
+                if (power === 0) continue;
+
+                const coil = Coils[c];
+                const cStart = coil.Offset;
+                const cEnd = coil.Offset + coil.Width;
+
+                // Насколько сердечник перекрывается с катушкой (или находится вблизи её торцов)
+                const overlap = Math.max(0, Math.min(aEnd, cEnd) - Math.max(aStart, cStart));
+                const ratio = overlap / Math.min(anchor.width, coil.Width);
+
+                // Намагничиваем пропорционально степени вхождения в катушку и её полярности
+                mag += ratio * power;
+            }
+            return Math.max(-1, Math.min(1, mag));
+        }
+
+        function draw(phaseKey = 0) {
+            ctx.clearRect(0, 0, cvsDisplay.width, cvsDisplay.height);
+            const mmPx = cvsDisplay.width / params.tubeWidth.value;
+            const phase = phasesData[phaseKey];
+            // 1. Катушки (прозрачность/яркость зависит от мощности катушки в текущей фазе)
+            for (let i = 0; i < Coils.length; ++i) {
+                const pwr = phase ? Math.abs(phase.coilPowers[i]) : 1;
+                ctx.globalAlpha = 0.25 + 0.75 * pwr; // Выключенная катушка (0) тускнеет
+                drawRect(
+                    Coils[i].Offset * mmPx,
+                    (cvsDisplay.height - mmPx * Coils[i].Height) / 2,
+                    Coils[i].Width * mmPx,
+                    mmPx * Coils[i].Height,
+                    '#EA3'
+                );
+            }
+            ctx.globalAlpha = 1.0;
+            // 2. Трубка
+            drawRect(0, (cvsDisplay.height - mmPx * params.tubeOutHeight.value) / 2, cvsDisplay.width, mmPx * params.tubeOutHeight.value, '#CCC');
+            drawRect(0, (cvsDisplay.height - mmPx * params.tubeInHeight.value) / 2, cvsDisplay.width, mmPx * params.tubeInHeight.value, '#888');
+            // 3. Якоря (рисуем с учетом объединения)
+            const groups = phase ? phase.mergedAnchors : [];
+
+            for (let i = 0; i < groups.length; ++i) {
+                const g = groups[i];
+                const gx = g.offset * mmPx;
+                const gw = g.width * mmPx;
+                const gh = mmPx * g.height;
+                const gy = (cvsDisplay.height - gh) / 2;
+
+                // Сам сердечник (одиночный или объединенный)
+                drawRect(gx, gy, gw, gh, '#3ae');
+
+                // Если сердечник составной — рисуем тонкую линию стыка, чтобы было видно сегменты
+                if (g.ids.length > 1) {
+                    ctx.strokeStyle = 'rgba(15, 23, 42, 0.45)';
+                    ctx.lineWidth = 1;
+                    let segX = gx;
+                    for (let k = 0; k < g.ids.length - 1; k++) {
+                        const segAnchor = Anchors.find(a => a.Id === g.ids[k]);
+                        segX += segAnchor.Width * mmPx;
+                        ctx.beginPath();
+                        ctx.moveTo(segX, gy);
+                        ctx.lineTo(segX, gy + gh);
+                        ctx.stroke();
+                    }
+                }
+
+                // Единая подложка с силой строго по центру (одиночного или объединенного) сердечника
+                const f = g.force ?? 0;
+                const textColor = f > 0.01 ? '#4ade80' : (f < -0.01 ? '#f87171' : '#e5e5e5');
+                const prefix = g.ids.length > 1 ? `[${g.ids.join('+')}] ` : '';
+                const labelText = `${prefix}${f > 0 ? '+' : ''}${f.toFixed(2)}`;
+
+                drawTextWithBg(labelText, gx + gw / 2, gy + 12, textColor, 'rgba(120, 120, 120, 0.5)');
+            }
+
+        } 
+        sldProgress.addEventListener('input', function () {
+            applyPhase(parseInt(this.value, 10));
+        });
+        // Инициализация
+        buildForm();
+        init();
+        resetParams();
+        buildAllPhases();
+        applyPhase(0);
+</script>
+</body >
+</html >

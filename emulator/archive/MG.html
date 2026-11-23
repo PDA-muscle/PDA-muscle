@@ -1,0 +1,878 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Move Phase Emulator v22 — Auto Design</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        #mainHolder {
+            display: grid;
+            grid-template-rows: auto 1fr auto auto;
+            grid-template-columns: 1fr;
+            height: 100dvh;
+            width: 100vw;
+            overflow: hidden;
+            position: fixed;
+            inset: 0;
+            background-color: #121212;
+        }
+
+        #paramsHolder {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(155px, max-content) 58px 26px);
+            gap: 6px 8px;
+            padding: 8px 12px;
+            background-color: #222222;
+            color: #d4d4d4;
+            font-family: sans-serif;
+            font-size: 12px;
+            align-items: center;
+            grid-row: 1;
+            border-bottom: 1px solid #383838;
+        }
+
+            #paramsHolder label {
+                text-align: right;
+                white-space: nowrap;
+                padding-left: 6px;
+            }
+
+            #paramsHolder input {
+                width: 100%;
+                padding: 3px 5px;
+                background-color: #333333;
+                color: #ffffff;
+                border: 1px solid #525252;
+                border-radius: 4px;
+                font-size: 12px;
+            }
+
+                #paramsHolder input:focus {
+                    outline: none;
+                    border-color: #38bdf8;
+                }
+
+        .opt-btn {
+            background: #2f2f2f;
+            color: #fbbf24;
+            border: 1px solid #4a4a4a;
+            border-radius: 4px;
+            padding: 2px 0;
+            cursor: pointer;
+            font-size: 11px;
+            text-align: center;
+        }
+
+            .opt-btn:hover {
+                background: #404040;
+                border-color: #fbbf24;
+            }
+
+        .cvsWrapper {
+            grid-row: 2;
+            min-height: 0;
+            min-width: 0;
+            position: relative;
+        }
+
+        #cvsDisplay {
+            display: block;
+            background-color: #0d0d0f;
+            width: 100%;
+            height: 100%;
+        }
+
+        #systemSummaryHolder {
+            grid-row: 3;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px 20px;
+            padding: 6px 14px;
+            background-color: #1b1e23;
+            border-top: 1px solid #333;
+            color: #e5e5e5;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        #resultsHolder {
+            grid-row: 4;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px 14px;
+            background: #222222;
+            border-top: 1px solid #383838;
+            font-family: monospace;
+            font-size: 12px;
+            color: #e5e5e5;
+        }
+    </style>
+</head>
+<body>
+    <div id="mainHolder">
+        <div id="paramsHolder"></div>
+        <div class="cvsWrapper"><canvas id="cvsDisplay"></canvas></div>
+        <div id="systemSummaryHolder"></div>
+        <div id="resultsHolder"></div>
+    </div>
+    <script>
+        const paramsHolder = document.getElementById('paramsHolder');
+        const cvsDisplay = document.getElementById('cvsDisplay');
+        const systemSummaryHolder = document.getElementById('systemSummaryHolder');
+        const resultsHolder = document.getElementById('resultsHolder');
+        const cvsWrapper = document.querySelector('.cvsWrapper');
+        const ctx = cvsDisplay.getContext('2d');
+
+        const params = {
+            tubeWidth: { value: 106.0, label: 'Длина трубки (мм)', step: 1, min: 20, isInt: false },
+            tubeOutHeight: { value: 6.0, label: 'Внеш. D трубки (мм)', step: 0.1, min: 2, isInt: false },
+            tubeInHeight: { value: 5.2, label: 'Внутр. D трубки (мм)', step: 0.1, min: 1.5, isInt: false },
+            coilsCount: { value: 5, label: 'Кол-во катушек', step: 1, min: 1, isInt: true },
+            coilWidth: { value: 17, label: 'Ширина катушки (мм)', step: 0.5, min: 2, isInt: false },
+            coilWireSize: { value: 0.18, label: 'Диаметр провода (мм)', step: 0.01, min: 0.05, isInt: false },
+            coilWireLayers: { value: 4, label: 'Слоев намотки', step: 1, min: 1, isInt: true },
+            maxOuterRadius: { value: 4.0, label: 'Макс. наружный радиус (мм)', step: 0.1, min: 3.0, isInt: false },
+            coilStep: { value: 4, label: 'Шаг катушек (мм)', step: 0.5, min: 0, isInt: false },
+            coilOffset: { value: 3, label: 'Отступ катушек (мм)', step: 0.5, min: 0, isInt: false },
+            anchorsHeight: { value: 5.0, label: 'Диаметр якоря (мм)', step: 0.1, min: 1, isInt: false },
+            anchorsCount: { value: 3, label: 'Кол-во якорей', step: 1, min: 1, isInt: true },
+            anchorsOffset: { value: 0, label: 'Нач. отступ якоря (мм)', step: 0.5, min: 0, isInt: false },
+            anchorsStep: { value: 0, label: 'Нач. зазор якорей (мм)', step: 0.5, min: 0, isInt: false },
+            spacerWidth: { value: 2.0, label: 'Прокладка (мм)', step: 0.5, min: 0, isInt: false },
+            anchorsWidth: { value: 18.0, label: 'Длина якоря (мм)', step: 0.5, min: 2, isInt: false },
+            voltage: { value: 12.0, label: 'Напряжение (В)', step: 0.5, min: 1, isInt: false },
+            maxCoilCurrent: { value: 3.3, label: 'Макс. ток катушки (А)', step: 0.1, min: 0.1, max: 10, isInt: false },
+            satTesla: { value: 1.4, label: 'Насыщение стали (Тл)', step: 0.1, min: 0.2, isInt: false },
+            pwmFreqKhz: { value: 22, label: 'Частота ШИМ (кГц)', step: 1, min: 1, max: 50, isInt: true },
+            powerStep: { value: 10, label: 'Шаг ШИМ (%)', step: 1, min: 1, max: 50, isInt: true },
+            captureZone: { value: 3.0, label: 'Зона захвата (мм)', step: 0.5, min: 0, isInt: false },
+            minStrokePct: { value: 40, label: 'Мин. ход системы (%)', step: 1, min: 0, max: 95, isInt: true }
+        };
+
+        let Coils = [], Anchors = [], phasesData = {}, emSpecs = {}, systemSummary = {};
+        let showForceChart = true, showCurrentChart = true;
+
+        const infoPanel = document.createElement('div');
+        const sliderRow = document.createElement('div');
+        const btnPrev = document.createElement('button');
+        const sldProgress = document.createElement('input');
+        const btnNext = document.createElement('button');
+        const btnForceGraph = document.createElement('button');
+        const btnCurrentGraph = document.createElement('button');
+
+        sldProgress.type = 'range'; sldProgress.min = 0; sldProgress.step = 1; sldProgress.value = 0;
+
+        function calculateEMSpecs() {
+            const wireD = params.coilWireSize.value, coilW = params.coilWidth.value, layers = params.coilWireLayers.value;
+            const tubeOutD = params.tubeOutHeight.value, anchorD = params.anchorsHeight.value;
+            const U = params.voltage.value, freqHz = params.pwmFreqKhz.value * 1000, maxCurrentA = params.maxCoilCurrent.value;
+
+            const turnsPerLayer = Math.max(1, Math.floor(coilW / wireD));
+            const totalTurns = Math.max(1, turnsPerLayer * layers);
+            let wireLengthM = 0;
+            for (let layer = 0; layer < layers; layer++) {
+                wireLengthM += Math.PI * (tubeOutD + wireD * (layer + 0.5)) * turnsPerLayer / 1000;
+            }
+            const wireAreaMm2 = Math.PI * Math.pow(wireD / 2, 2);
+            const resistanceOhm20 = Math.max(0.05, (0.0175 * wireLengthM) / wireAreaMm2);
+            const resistanceOhm = resistanceOhm20 * (1 + 0.00393 * (80 - 20));
+            const unconstrainedCurrentA = U / resistanceOhm;
+            const operatingCurrentA = Math.min(maxCurrentA, unconstrainedCurrentA);
+            const maxAmpTurns = operatingCurrentA * totalTurns;
+
+            const anchorRadiusM = (anchorD / 2) / 1000;
+            const anchorAreaM2 = Math.PI * anchorRadiusM * anchorRadiusM;
+            const mu0 = 4 * Math.PI * 1e-7;
+            const coilLenM = Math.max(0.001, coilW / 1000);
+            const inductanceAirH = (mu0 * totalTurns * totalTurns * anchorAreaM2) / coilLenM;
+            const maxRippleA = (U * 0.25) / (Math.max(1e-6, inductanceAirH) * freqHz);
+            const radialGapMm = Math.max(0.05, (params.tubeInHeight.value - anchorD) / 2);
+
+            emSpecs = {
+                totalTurns, turnsPerLayer, wireLengthM, resistanceOhm20, resistanceOhm,
+                maxCurrentA: operatingCurrentA, unconstrainedCurrentA, maxAmpTurns,
+                anchorAreaM2, mu0, inductanceMh: inductanceAirH * 1000,
+                maxRippleA, radialGapMm, coilLenM,
+                maxDuty: Math.min(1, maxCurrentA / Math.max(0.001, unconstrainedCurrentA))
+            };
+        }
+
+        function coilInductanceAt(coil, anchorOffset, anchorWidth, currentA) {
+            const I = Math.max(0, currentA);
+            const Lair = emSpecs.inductanceMh / 1000;
+            if (I <= 1e-6) return Lair;
+
+            const coilCenter = coil.Offset + coil.Width / 2;
+            const anchorCenter = anchorOffset + anchorWidth / 2;
+            const dx = Math.abs(coilCenter - anchorCenter);
+
+            // Полная полудлина взаимодействия: от совпадения центров (dx = 0)
+            // до выхода переднего торца за пределы катушки + зона захвата
+            const capture = Math.max(1.0, params.captureZone.value || 2.5);
+            const maxSpan = (coil.Width + anchorWidth) / 2 + capture;
+            if (dx >= maxSpan) return Lair;
+
+            // Плавный косинусоидальный профиль индуктивности на всём пути вхождения
+            const smoothOverlap = 0.5 * (1 + Math.cos((Math.PI * dx) / maxSpan));
+
+            // Эффективная магнитная проницаемость сердечника с учётом радиального зазора
+            const aspect = Math.min(coil.Width, anchorWidth) / Math.max(0.5, params.anchorsHeight.value);
+            const gapRatio = emSpecs.radialGapMm / Math.max(0.5, params.anchorsHeight.value);
+            const muEff = (1 + 7.2 * Math.pow(aspect, 0.85)) / (1 + 3.5 * gapRatio);
+
+            // Индукция внутри сердечника с плавным магнитным насыщением Bsat
+            const Bair = (emSpecs.mu0 * emSpecs.totalTurns * I) / emSpecs.coilLenM;
+            const rawB = Bair * muEff;
+            const Bsat = Math.max(0.1, params.satTesla.value);
+            const Bcore = Bsat * Math.tanh(rawB / Bsat);
+
+            // Пиковая тяга по формуле Максвелла (с коэффициентом краевого рассеяния 0.62)
+            const kFringe = 0.62;
+            const peakMaxwellForceN = kFringe * ((Bcore * Bcore * emSpecs.anchorAreaM2) / (2 * emSpecs.mu0));
+
+            // Эквивалентный прирост индуктивности Lboost, дающий F_peak = 0.5 * I^2 * (dL/dx)_max
+            const maxSpanM = maxSpan / 1000;
+            const Lboost = (4 * maxSpanM * peakMaxwellForceN) / (Math.PI * I * I);
+
+            return Lair + Lboost * smoothOverlap;
+        }
+
+
+
+
+
+
+        function calcClusterForceNewtons(clusterOffset, clusterWidth, coilPowers) {
+            const Imax = emSpecs.maxCurrentA, U = params.voltage.value, dxM = 0.05;
+            let totalForceN = 0;
+            for (let c = 0; c < Coils.length; c++) {
+                const duty = Math.max(0, Math.min(1, coilPowers[c] ?? 0));
+                if (duty <= 0) continue;
+                const currentA = Math.min(Imax, duty * U / emSpecs.resistanceOhm);
+                const Lplus = coilInductanceAt(Coils[c], clusterOffset + dxM, clusterWidth, currentA);
+                const Lminus = coilInductanceAt(Coils[c], clusterOffset - dxM, clusterWidth, currentA);
+                totalForceN += 0.5 * currentA * currentA * ((Lplus - Lminus) / (2 * dxM / 1000));
+            }
+            return totalForceN;
+        }
+
+        function isClusterEnteringCoil(coil, clusterOffset, clusterWidth) {
+            const frontTip = clusterOffset + clusterWidth, backTip = clusterOffset;
+            const cStart = coil.Offset, cEnd = coil.Offset + coil.Width, capture = params.captureZone.value;
+            return (frontTip >= cStart - capture) && (frontTip <= cEnd + coil.Width * 0.25) && (backTip < cStart);
+        }
+
+        function recalculatePhase(phaseKey) {
+            const phase = phasesData[phaseKey];
+            if (!phase) return;
+            const mergedGroups = [], EPSILON = 0.001, hasSpacer = params.spacerWidth.value > 0.001;
+
+            for (let i = 0; i < phase.anchors.length; i++) {
+                const curr = phase.anchors[i];
+                if (mergedGroups.length === 0) {
+                    mergedGroups.push({ ids: [curr.id], offset: curr.offset, width: curr.width, height: curr.height, forceN: 0 });
+                } else {
+                    const last = mergedGroups[mergedGroups.length - 1];
+                    if (!hasSpacer && Math.abs((last.offset + last.width) - curr.offset) <= EPSILON) {
+                        last.ids.push(curr.id); last.width += curr.width;
+                    } else {
+                        mergedGroups.push({ ids: [curr.id], offset: curr.offset, width: curr.width, height: curr.height, forceN: 0 });
+                    }
+                }
+            }
+
+            let totalForceN = 0;
+            mergedGroups.forEach(group => {
+                group.forceN = Number(calcClusterForceNewtons(group.offset, group.width, phase.coilPowers).toFixed(3));
+                totalForceN += group.forceN;
+            });
+
+            let supplyCurrentA = 0, coilsCurrentA = 0, copperPowerW = 0;
+            for (let c = 0; c < Coils.length; c++) {
+                const duty = Math.max(0, Math.min(1, phase.coilPowers[c] ?? 0));
+                const currentA = Math.min(emSpecs.maxCurrentA, duty * params.voltage.value / emSpecs.resistanceOhm);
+                coilsCurrentA += currentA;
+                supplyCurrentA += duty * currentA;
+                copperPowerW += duty * currentA * currentA * emSpecs.resistanceOhm;
+            }
+
+            phase.mergedAnchors = mergedGroups;
+            phase.totalForceN = Number(totalForceN.toFixed(3));
+            phase.supplyCurrentA = Number(supplyCurrentA.toFixed(3));
+            phase.coilsCurrentA = Number(coilsCurrentA.toFixed(3));
+            phase.powerWatts = Number((supplyCurrentA * params.voltage.value).toFixed(2));
+            phase.coilCopperLossW = Number(copperPowerW.toFixed(2));
+        }
+
+        function optimizeAllPhases() {
+            const stepFrac = Math.max(1, params.powerStep.value) / 100;
+            const maxStep = parseInt(sldProgress.max, 10);
+
+            for (const key in phasesData) {
+                const phaseKey = parseInt(key, 10), phase = phasesData[phaseKey];
+                if (!phase) continue;
+                phase.isHoldPhase = (phaseKey === maxStep);
+                phase.coilPowers.fill(0);
+
+                for (let c = 0; c < Coils.length; c++) {
+                    const coil = Coils[c];
+                    const cCenter = coil.Offset + coil.Width / 2;
+                    const capture = params.captureZone.value;
+
+                    // Проверяем, есть ли перед этой катушкой якорь, который она втягивает вправо
+                    let hasPullingTarget = false;
+                    phase.mergedAnchors.forEach(group => {
+                        const frontTip = group.offset + group.width;
+                        const anchorCenter = group.offset + group.width / 2;
+                        if (frontTip >= coil.Offset - capture && anchorCenter < cCenter - 0.2) {
+                            hasPullingTarget = true;
+                        }
+                    });
+
+                    if (!hasPullingTarget) continue;
+
+                    // Проверяем суммарную силу системы при включении этой катушки
+                    phase.coilPowers[c] = emSpecs.maxDuty;
+                    recalculatePhase(phaseKey);
+                    const forceOn = phase.totalForceN;
+
+                    phase.coilPowers[c] = 0;
+                    recalculatePhase(phaseKey);
+                    const forceOff = phase.totalForceN;
+
+                    if (forceOn > forceOff + 0.005) {
+                        let bestP = emSpecs.maxDuty;
+                        let bestF = forceOn;
+                        for (let p = stepFrac; p <= emSpecs.maxDuty + 0.0001; p += stepFrac) {
+                            const testP = Number(Math.min(emSpecs.maxDuty, p).toFixed(2));
+                            phase.coilPowers[c] = testP;
+                            recalculatePhase(phaseKey);
+                            if (phase.totalForceN > bestF + 0.005) {
+                                bestF = phase.totalForceN;
+                                bestP = testP;
+                            }
+                        }
+                        phase.coilPowers[c] = bestP;
+                    } else {
+                        phase.coilPowers[c] = 0;
+                    }
+                }
+                recalculatePhase(phaseKey);
+            }
+        }
+
+
+
+        function calcHumanMuscleForceNewtons(offsetMm) {
+            const tubeLen = Math.max(1, params.tubeWidth.value);
+            const outerCoilDiameterMm = params.tubeOutHeight.value + 2 * params.coilWireSize.value * params.coilWireLayers.value;
+            const radiusCm = (outerCoilDiameterMm / 2) / 10;
+            const areaCm2 = Math.PI * radiusCm * radiusCm;
+            const peakIsometricN = areaCm2 * 30.0;
+            const strain = Math.max(0, offsetMm / tubeLen);
+            const lengthTensionFactor = Math.max(0, 1 - Math.pow(Math.max(0, strain - 0.04) / 0.46, 2));
+            return peakIsometricN * 0.85 * lengthTensionFactor;
+        }
+
+        function computeSystemSummary() {
+            const tubeLen = params.tubeWidth.value, nAnchors = params.anchorsCount.value;
+            const anchorLen = params.anchorsWidth.value, spacer = params.spacerWidth.value;
+            const totalAssemblyLen = nAnchors * anchorLen + Math.max(0, nAnchors - 1) * spacer;
+            const strokeMm = Math.max(0, tubeLen - totalAssemblyLen);
+            const strokePct = tubeLen > 0 ? (strokeMm / tubeLen) * 100 : 0;
+
+            const keys = Object.keys(phasesData).map(Number).sort((a, b) => a - b);
+            const maxKey = keys.length > 0 ? keys[keys.length - 1] : 0;
+            const moveKeys = keys.length > 1 ? keys.slice(0, -1) : keys;
+
+            let sumForce = 0, sumMuscleForce = 0, peakForce = -Infinity;
+            moveKeys.forEach(k => {
+                const f = phasesData[k].totalForceN;
+                sumForce += f;
+                sumMuscleForce += phasesData[k].muscleForceN ?? 0;
+                if (f > peakForce) peakForce = f;
+            });
+            const avgForceN = moveKeys.length > 0 ? sumForce / moveKeys.length : 0;
+            const avgMuscleForceN = moveKeys.length > 0 ? sumMuscleForce / moveKeys.length : 0;
+            const holdForceN = phasesData[maxKey] ? phasesData[maxKey].totalForceN : 0;
+
+            let sumCurrent = 0, sumWatts = 0;
+            keys.forEach(k => { sumCurrent += phasesData[k].supplyCurrentA; sumWatts += phasesData[k].powerWatts; });
+            const avgCurrentA = keys.length > 0 ? sumCurrent / keys.length : 0;
+            const avgWatts = keys.length > 0 ? sumWatts / keys.length : 0;
+            const efficiencyNPerW = avgWatts > 0 ? avgForceN / avgWatts : 0;
+
+            systemSummary = { strokeMm, strokePct, avgForceN, avgMuscleForceN, peakForceN: peakForce === -Infinity ? 0 : peakForce, holdForceN, avgCurrentA, avgWatts, efficiencyNPerW };
+
+            const isStrokeOk = strokePct >= params.minStrokePct.value - 0.01;
+            const strokeColor = isStrokeOk ? '#4ade80' : '#f87171';
+            const strokeWarn = isStrokeOk ? '' : ` [⚠ < ${params.minStrokePct.value}%]`;
+
+            systemSummaryHolder.innerHTML = `
+                        <span style="color:#94a3b8; font-weight:bold;">СВОДКА ПО ВСЕМ ФАЗАМ:</span>
+                        <span>Рабочий ход: <b style="color:${strokeColor}">${strokePct.toFixed(1)}% (${strokeMm.toFixed(1)} мм)${strokeWarn}</b></span>
+                        <span>Средняя тяга: <b style="color:#38bdf8">${avgForceN.toFixed(2)} Н</b> (пик: ${systemSummary.peakForceN.toFixed(2)} Н)</span>
+                        <span>Мышца (ср.): <b style="color:#4ade80">${avgMuscleForceN.toFixed(2)} Н</b></span>
+                        <span>Удержание (финал): <b style="color:#a78bfa">${holdForceN.toFixed(2)} Н</b></span>
+                        <span>Средний ток БП: <b style="color:#fbbf24">${avgCurrentA.toFixed(2)} А</b> (${avgWatts.toFixed(1)} Вт)</span>
+                        <span>Эффективность: <b>${efficiencyNPerW.toFixed(3)} Н/Вт</b></span>
+                    `;
+        }
+        function buildAllPhases() {
+            phasesData = {};
+            const maxStep = parseInt(sldProgress.max, 10), spacer = params.spacerWidth.value;
+
+            for (let step = 0; step <= maxStep; step++) {
+                let moveLim = params.tubeWidth.value;
+                const phaseAnchors = new Array(Anchors.length);
+                for (let i = Anchors.length - 1; i >= 0; --i) {
+                    moveLim -= Anchors[i].Width;
+                    let pos = Anchors[i].StartOffset + step;
+                    if (pos > moveLim) pos = moveLim;
+                    phaseAnchors[i] = { id: Anchors[i].Id, offset: pos, width: Anchors[i].Width, height: Anchors[i].Height };
+                    moveLim = pos - spacer;
+                }
+                phasesData[step] = {
+                    offset: step, coilPowers: new Array(Coils.length).fill(0), anchors: phaseAnchors, mergedAnchors: [],
+                    totalForceN: 0, muscleForceN: Number(calcHumanMuscleForceNewtons(step).toFixed(3)),
+                    supplyCurrentA: 0, coilsCurrentA: 0, powerWatts: 0, isHoldPhase: false
+                };
+                recalculatePhase(step);
+            }
+            optimizeAllPhases();
+            computeSystemSummary();
+        }
+
+        function isValidConfig() {
+            if (params.tubeInHeight.value >= params.tubeOutHeight.value) return false;
+            if (params.anchorsHeight.value >= params.tubeInHeight.value) return false;
+            const windingOuterRadius = params.tubeOutHeight.value / 2 + params.coilWireSize.value * params.coilWireLayers.value;
+            if (windingOuterRadius > params.maxOuterRadius.value + 1e-9) return false;
+
+            const tubeLen = params.tubeWidth.value, nAnchors = params.anchorsCount.value;
+            const anchorLen = params.anchorsWidth.value, spacer = params.spacerWidth.value;
+            const initialGap = Math.max(spacer, params.anchorsStep.value);
+            const minAssemblyLen = nAnchors * anchorLen + Math.max(0, nAnchors - 1) * spacer;
+            const startAssemblyLen = params.anchorsOffset.value + nAnchors * anchorLen + Math.max(0, nAnchors - 1) * initialGap;
+            if (startAssemblyLen > tubeLen) return false;
+
+            const strokePct = ((tubeLen - minAssemblyLen) / tubeLen) * 100;
+            return strokePct >= params.minStrokePct.value - 0.01;
+        }
+
+        function optimizeSingleParam(targetKey) {
+            const item = params[targetKey], originalVal = item.value, step = item.step;
+            let bestVal = originalVal, bestScore = -Infinity;
+
+            for (let i = -100; i <= 100; i++) {
+                let candidate = item.isInt ? Math.round(originalVal + i * step) : Number((originalVal + i * step).toFixed(4));
+                if ((item.min !== undefined && candidate < item.min) || (item.max !== undefined && candidate > item.max)) continue;
+                item.value = candidate;
+                if (!isValidConfig()) continue;
+                resetParams(); buildAllPhases();
+                if (systemSummary.avgForceN > bestScore + 0.001) { bestScore = systemSummary.avgForceN; bestVal = candidate; }
+            }
+            item.value = bestVal;
+            const inp = document.getElementById('param_' + targetKey);
+            if (inp) inp.value = bestVal;
+            resetParams(); buildAllPhases(); applyPhase(parseInt(sldProgress.value, 10));
+        }
+
+        async function autoCalculateAll() {
+            const btn = document.getElementById('btnAutoCalculate');
+            if (btn.disabled) return;
+            btn.disabled = true;
+            const oldText = btn.textContent;
+            btn.textContent = 'Расчёт...';
+
+            const fixedKeys = new Set([
+                'tubeWidth', 'tubeOutHeight', 'tubeInHeight', 'anchorsHeight',
+                'voltage', 'maxCoilCurrent', 'minStrokePct', 'captureZone',
+                'coilWireSize', 'coilWireLayers', 'maxOuterRadius',
+                'satTesla', 'pwmFreqKhz', 'powerStep'
+            ]);
+
+            const searchPasses = new Array(
+                new Array(
+                    { key: 'coilsCount', delta: 1, radius: 3 },
+                    { key: 'coilWidth', delta: 2, radius: 5 },
+                    { key: 'coilStep', delta: 1, radius: 3 },
+                    { key: 'coilOffset', delta: 1, radius: 3 },
+                    { key: 'anchorsCount', delta: 1, radius: 3 },
+                    { key: 'anchorsWidth', delta: 2, radius: 6 },
+                    { key: 'anchorsOffset', delta: 1, radius: 3 },
+                    { key: 'anchorsStep', delta: 0.5, radius: 4 },
+                    { key: 'spacerWidth', delta: 0.5, radius: 6 }
+                ),
+                new Array(
+                    { key: 'coilWidth', delta: 0.5, radius: 4 },
+                    { key: 'coilStep', delta: 0.5, radius: 3 },
+                    { key: 'coilOffset', delta: 0.5, radius: 3 },
+                    { key: 'anchorsWidth', delta: 0.5, radius: 4 },
+                    { key: 'anchorsStep', delta: 0.5, radius: 3 },
+                    { key: 'spacerWidth', delta: 0.5, radius: 4 }
+                ),
+                new Array(
+                    { key: 'coilWidth', delta: 0.5, radius: 2 },
+                    { key: 'anchorsWidth', delta: 0.5, radius: 2 },
+                    { key: 'spacerWidth', delta: 0.5, radius: 2 }
+                )
+            );
+
+            const original = {};
+            for (const key in params) original[key] = params[key].value;
+            const sliderOriginal = Number(sldProgress.value) || 0;
+            let bestValues = { ...original };
+
+            function applyValues(values) {
+                for (const key in values) {
+                    if (params[key]) params[key].value = values[key];
+                }
+                resetParams();
+                if (!isValidConfig()) return null;
+                buildAllPhases();
+                if (systemSummary.strokePct < params.minStrokePct.value - 0.01) return null;
+
+                const keys = Object.keys(phasesData).map(Number).sort((a, b) => a - b);
+                const moveKeys = keys.length > 1 ? keys.slice(0, -1) : keys;
+                let minMoveForce = Infinity;
+                moveKeys.forEach(k => {
+                    if (phasesData[k].totalForceN < minMoveForce) minMoveForce = phasesData[k].totalForceN;
+                });
+                if (minMoveForce === Infinity) minMoveForce = 0;
+
+                return systemSummary.avgForceN + 0.85 * minMoveForce + Math.min(0.0009, systemSummary.efficiencyNPerW * 0.00001);
+            }
+
+
+            try {
+                let bestScore = applyValues(bestValues);
+                if (bestScore === null) bestScore = -Infinity;
+
+                // 1. Нониусный перебор сдвига фаз (1/3, 2/3, 1.5 шага катушки) против нулевых провалов
+                const coilCounts = new Array(5, 6, 7);
+                const anchorCounts = new Array(2, 3, 4);
+                for (const cCnt of coilCounts) {
+                    for (const aCnt of anchorCounts) {
+                        const maxCoilPitch = (params.tubeWidth.value - 4) / cCnt;
+                        const cW = Math.max(8, Math.floor((maxCoilPitch * 0.78) * 2) / 2);
+                        const cStep = Math.max(2, Math.floor((maxCoilPitch - cW) * 2) / 2);
+                        const cPitch = cW + cStep;
+
+                        for (const ratio of new Array(0.67, 1.33, 1.5)) {
+                            const aPitch = cPitch * ratio;
+                            const maxTotalAnchors = params.tubeWidth.value * (1 - params.minStrokePct.value / 100);
+                            if (aPitch * (aCnt - 1) + 10 > maxTotalAnchors) continue;
+
+                            const aW = Math.max(8, Math.min(26, Math.floor((aPitch * 0.68) * 2) / 2));
+                            const spW = Math.max(1, Math.round((aPitch - aW) * 2) / 2);
+
+                            const candidate = {
+                                ...bestValues,
+                                coilsCount: cCnt,
+                                coilWidth: cW,
+                                coilStep: cStep,
+                                coilOffset: 2,
+                                anchorsCount: aCnt,
+                                anchorsWidth: aW,
+                                spacerWidth: spW,
+                                anchorsOffset: 1,
+                                anchorsStep: 0
+                            };
+                            const score = applyValues(candidate);
+                            if (score !== null && score > bestScore) {
+                                bestScore = score;
+                                bestValues = candidate;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Трёхпроходный координатный спуск для точной доводки
+                for (let pass = 0; pass < searchPasses.length; pass++) {
+                    const search = searchPasses.at(pass).filter(x => !fixedKeys.has(x.key));
+                    for (const entry of search) {
+                        const key = entry.key;
+                        const delta = entry.delta;
+                        const radius = entry.radius;
+
+                        const item = params[key];
+                        const center = bestValues[key];
+                        let localBest = center;
+                        let localScore = applyValues(bestValues);
+                        if (localScore === null) localScore = -Infinity;
+
+                        const candidates = new Array();
+                        for (let n = -radius; n <= radius; n++) {
+                            let v = item.isInt ? Math.round(center + n * delta) : Number((center + n * delta).toFixed(4));
+                            if (item.min !== undefined) v = Math.max(item.min, v);
+                            if (item.max !== undefined) v = Math.min(item.max, v);
+                            if (!candidates.includes(v)) candidates.push(v);
+                        }
+
+                        for (const candidate of candidates) {
+                            const score = applyValues({ ...bestValues, [key]: candidate });
+                            if (score !== null && score > localScore + 1e-9) {
+                                localScore = score;
+                                localBest = candidate;
+                            }
+                        }
+                        bestValues[key] = localBest;
+                        btn.textContent = 'Расчёт ' + key + ' (' + (pass + 1) + '/' + searchPasses.length + ')';
+                        await new Promise(resolve => setTimeout(resolve, 0));
+                    }
+                }
+
+
+                applyValues(bestValues);
+                for (const key in params) {
+                    const inp = document.getElementById('param_' + key);
+                    if (inp) inp.value = params[key].value;
+                }
+                sldProgress.value = Math.min(sliderOriginal, Number(sldProgress.max) || 0);
+                applyPhase(parseInt(sldProgress.value, 10));
+                btn.textContent = 'Авторасчёт завершён';
+            } catch (err) {
+                for (const key in original) params[key].value = original[key];
+                resetParams();
+                buildAllPhases();
+                applyPhase(Math.min(sliderOriginal, Number(sldProgress.max) || 0));
+                btn.textContent = 'Ошибка расчёта';
+                console.error('Auto calculation failed:', err);
+            } finally {
+                btn.disabled = false;
+                setTimeout(() => { btn.textContent = oldText; }, 2500);
+            }
+        }
+
+
+        function buildForm() {
+            paramsHolder.innerHTML = '';
+            for (const key in params) {
+                const item = params[key];
+                const label = document.createElement('label'); label.textContent = item.label + ':'; label.htmlFor = 'param_' + key;
+                const input = document.createElement('input'); input.type = 'number'; input.id = 'param_' + key; input.value = item.value; input.step = item.step;
+                if (item.min !== undefined) input.min = item.min;
+                if (item.max !== undefined) input.max = item.max;
+                input.addEventListener('input', function () {
+                    const parsed = item.isInt ? parseInt(this.value, 10) : parseFloat(this.value);
+                    if (!isNaN(parsed)) { params[key].value = parsed; resetParams(); buildAllPhases(); applyPhase(parseInt(sldProgress.value, 10)); }
+                });
+                const optBtn = document.createElement('button'); optBtn.type = 'button'; optBtn.className = 'opt-btn'; optBtn.textContent = '✨';
+                optBtn.title = `Автоподбор "${item.label}" (-100..+100 шагов) при ходе ≥ ${params.minStrokePct.value}%`;
+                optBtn.addEventListener('click', () => optimizeSingleParam(key));
+                paramsHolder.appendChild(label); paramsHolder.appendChild(input); paramsHolder.appendChild(optBtn);
+            }
+            const autoBtn = document.createElement('button');
+            autoBtn.type = 'button'; autoBtn.id = 'btnAutoCalculate'; autoBtn.textContent = 'Авторасчёт конструкции';
+            autoBtn.style.cssText = 'grid-column:1/-1; background:#164e63; color:#e0f2fe; border:1px solid #0e7490; border-radius:5px; padding:7px 12px; cursor:pointer; font-weight:bold;';
+            autoBtn.addEventListener('click', autoCalculateAll);
+            paramsHolder.appendChild(autoBtn);
+        }
+
+        function init() {
+            infoPanel.style.cssText = 'display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;';
+            sliderRow.style.cssText = 'display: flex; align-items: center; gap: 8px; width: 100%;';
+            sldProgress.style.cssText = 'flex: 1; cursor: pointer;';
+            const btnStyle = 'background: #383838; color: #fff; border: 1px solid #555; border-radius: 4px; padding: 3px 8px; cursor: pointer; font-family: monospace; font-size: 12px;';
+            btnPrev.textContent = '◀'; btnNext.textContent = '▶';
+            btnForceGraph.textContent = '📈 График тяги (Н)'; btnCurrentGraph.textContent = '⚡ График тока (А)';
+            btnPrev.style.cssText = btnStyle; btnNext.style.cssText = btnStyle;
+            btnForceGraph.style.cssText = btnStyle + 'border-color: #38bdf8; color: #38bdf8;';
+            btnCurrentGraph.style.cssText = btnStyle + 'border-color: #fbbf24; color: #fbbf24;';
+
+            btnPrev.addEventListener('click', () => { sldProgress.value = Math.max(0, parseInt(sldProgress.value, 10) - 1); applyPhase(parseInt(sldProgress.value, 10)); });
+            btnNext.addEventListener('click', () => { sldProgress.value = Math.min(parseInt(sldProgress.max, 10), parseInt(sldProgress.value, 10) + 1); applyPhase(parseInt(sldProgress.value, 10)); });
+            btnForceGraph.addEventListener('click', () => { showForceChart = !showForceChart; btnForceGraph.style.borderColor = showForceChart ? '#38bdf8' : '#555'; btnForceGraph.style.color = showForceChart ? '#38bdf8' : '#aaa'; draw(parseInt(sldProgress.value, 10)); });
+            btnCurrentGraph.addEventListener('click', () => { showCurrentChart = !showCurrentChart; btnCurrentGraph.style.borderColor = showCurrentChart ? '#fbbf24' : '#555'; btnCurrentGraph.style.color = showCurrentChart ? '#fbbf24' : '#aaa'; draw(parseInt(sldProgress.value, 10)); });
+
+            sliderRow.appendChild(btnPrev); sliderRow.appendChild(sldProgress); sliderRow.appendChild(btnNext); sliderRow.appendChild(btnForceGraph); sliderRow.appendChild(btnCurrentGraph);
+            resultsHolder.appendChild(infoPanel); resultsHolder.appendChild(sliderRow);
+
+            new ResizeObserver(entries => {
+                const { width, height } = entries[0].contentRect;
+                const dpr = window.devicePixelRatio || 1;
+                cvsDisplay.width = Math.floor(width * dpr);
+                cvsDisplay.height = Math.floor(height * dpr);
+                draw(parseInt(sldProgress.value, 10));
+            }).observe(cvsWrapper);
+
+        }
+        function resetParams() {
+            calculateEMSpecs(); Coils = []; Anchors = [];
+            const nAnchors = params.anchorsCount.value, anchorLen = params.anchorsWidth.value, spacer = params.spacerWidth.value;
+            const initialGap = Math.max(spacer, params.anchorsStep.value);
+            const minAssemblyLen = nAnchors * anchorLen + Math.max(0, nAnchors - 1) * spacer;
+            const maxOffset = params.tubeWidth.value - minAssemblyLen - params.anchorsOffset.value;
+            sldProgress.max = Math.max(0, Math.floor(maxOffset));
+            if (parseInt(sldProgress.value, 10) > sldProgress.max) sldProgress.value = sldProgress.max;
+
+            const coilH = params.tubeOutHeight.value + params.coilWireSize.value * params.coilWireLayers.value * 2;
+            let offset = params.coilOffset.value;
+            for (let i = 0; i < params.coilsCount.value; ++i) {
+                Coils.push({ Id: i + 1, Height: coilH, Width: params.coilWidth.value, Offset: offset });
+                offset += params.coilWidth.value + params.coilStep.value;
+            }
+            offset = params.anchorsOffset.value;
+            for (let i = 0; i < nAnchors; ++i) {
+                Anchors.push({ Id: i + 1, Height: params.anchorsHeight.value, Width: anchorLen, Offset: offset, StartOffset: offset });
+                offset += anchorLen + initialGap;
+            }
+        }
+
+        function applyPhase(phaseKey) {
+            const phase = phasesData[phaseKey];
+            if (!phase) return;
+            for (let i = 0; i < Anchors.length; i++) Anchors[i].Offset = phase.anchors[i].offset;
+
+            const anchorsText = phase.mergedAnchors.map(g => `${g.ids.length > 1 ? `Сборка #${g.ids.join('+')}` : `Якорь #${g.ids}`}: <b>${g.forceN > 0 ? '+' : ''}${g.forceN.toFixed(2)} Н</b>`).join(' | ');
+            const modeBadge = phase.isHoldPhase ? '<span style="background:#4c1d95; color:#ddd6fe; padding:1px 6px; border-radius:4px; font-weight:bold;">🔒 УДЕРЖАНИЕ</span>' : '';
+            const pwmText = phase.coilPowers.map((p, idx) => `К${idx + 1}:${Math.round(p * 100)}%`).join(' ');
+
+            infoPanel.innerHTML = `
+                        <div>Фаза: <b>${phaseKey}/${sldProgress.max}</b> ${modeBadge} &nbsp;|&nbsp; ${anchorsText} &nbsp;|&nbsp; Тяга: <b style="color:#38bdf8">${phase.totalForceN > 0 ? '+' : ''}${phase.totalForceN.toFixed(2)} Н</b> &nbsp;|&nbsp; Мышца: <b style="color:#4ade80">${phase.muscleForceN.toFixed(2)} Н</b></div>
+                        <div>Ток БП: <b style="color:#fbbf24">${phase.supplyCurrentA.toFixed(2)} А</b> (${phase.powerWatts.toFixed(1)} Вт) &nbsp;|&nbsp; Ток обмоток: <b style="color:#38bdf8">${phase.coilsCurrentA.toFixed(2)} А</b> &nbsp;|&nbsp; [${pwmText}]</div>
+                    `;
+            draw(phaseKey);
+        }
+
+        function drawRect(x, y, width, height, color) { ctx.fillStyle = color; ctx.fillRect(x, y, width, height); }
+
+        function drawTextWithBg(text, x, y, textColor, bgColor = 'rgba(38, 38, 38, 0.9)', paddingX = 6, paddingY = 3) {
+            ctx.save(); ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            const boxWidth = ctx.measureText(text).width + paddingX * 2, boxHeight = 13 + paddingY * 2;
+            ctx.fillStyle = bgColor; ctx.beginPath(); ctx.roundRect(x - boxWidth / 2, y - boxHeight / 2, boxWidth, boxHeight, 4); ctx.fill();
+            ctx.fillStyle = textColor; ctx.fillText(text, x, y); ctx.restore();
+        }
+
+        function drawChartPanel(box, phaseKey, config) {
+            const keys = Object.keys(phasesData).map(Number).sort((a, b) => a - b);
+            if (keys.length < 2) return;
+            ctx.fillStyle = 'rgba(20, 20, 24, 0.95)'; ctx.fillRect(box.x, box.y, box.w, box.h);
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 1; ctx.strokeRect(box.x, box.y, box.w, box.h);
+
+            const padL = 52, padR = 16, padT = 22, padB = 20;
+            const plotW = Math.max(10, box.w - padL - padR), plotH = Math.max(10, box.h - padT - padB);
+            let minY = 0, maxY = 0.1;
+            keys.forEach(k => config.series.forEach(s => { const v = s.getValue(phasesData[k]); if (v < minY) minY = v; if (v > maxY) maxY = v; }));
+            maxY *= 1.1; if (minY < 0) minY *= 1.1;
+            const spanY = Math.max(0.01, maxY - minY);
+
+            const toX = k => box.x + padL + (k / Math.max(1, keys.length - 1)) * plotW;
+            const toY = v => box.y + padT + plotH - ((v - minY) / spanY) * plotH;
+
+            ctx.font = '10px monospace'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+            for (let s = 0; s <= 10; s++) {
+                const val = minY + (spanY * s) / 10, y = toY(val);
+                ctx.strokeStyle = Math.abs(val) < 1e-6 ? '#555' : 'rgba(255, 255, 255, 0.08)';
+                ctx.beginPath(); ctx.moveTo(box.x + padL, y); ctx.lineTo(box.x + padL + plotW, y); ctx.stroke();
+                if (s % 2 === 0 || s === 10) { ctx.fillStyle = '#888'; ctx.fillText(val.toFixed(1) + config.unit, box.x + padL - 6, y); }
+            }
+
+            ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            keys.forEach(k => {
+                if (k % 5 === 0) {
+                    const x = toX(k);
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)'; ctx.beginPath(); ctx.moveTo(x, box.y + padT); ctx.lineTo(x, box.y + padT + plotH); ctx.stroke();
+                    ctx.fillStyle = '#888'; ctx.fillText(k.toString(), x, box.y + padT + plotH + 4);
+                }
+            });
+
+            const zeroY = toY(0);
+            config.series.forEach(s => {
+                ctx.beginPath();
+                keys.forEach((k, idx) => { const x = toX(k), y = toY(s.getValue(phasesData[k])); if (idx === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+                ctx.setLineDash(s.dashed ? [4, 4] : []);
+                ctx.strokeStyle = s.color; ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
+                if (s.fill) { ctx.lineTo(toX(keys[keys.length - 1]), zeroY); ctx.lineTo(toX(keys[0]), zeroY); ctx.closePath(); ctx.fillStyle = s.fill; ctx.fill(); }
+            });
+
+            const curX = toX(phaseKey);
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(curX, box.y + padT); ctx.lineTo(curX, box.y + padT + plotH); ctx.stroke();
+            config.series.forEach(s => { ctx.fillStyle = s.color; ctx.beginPath(); ctx.arc(curX, toY(s.getValue(phasesData[phaseKey])), 4, 0, Math.PI * 2); ctx.fill(); });
+
+            ctx.fillStyle = '#e5e5e5'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+            ctx.fillText(config.title, box.x + padL, box.y + 5);
+        }
+
+        function draw(phaseKey = 0) {
+            const dpr = window.devicePixelRatio || 1, W = cvsDisplay.width / dpr, H = cvsDisplay.height / dpr;
+            ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+
+            const activeCharts = (showForceChart ? 1 : 0) + (showCurrentChart ? 1 : 0);
+            const tubeAreaH = activeCharts === 0 ? H : (activeCharts === 1 ? H * 0.56 : H * 0.42);
+            const mmPx = W / params.tubeWidth.value, phase = phasesData[phaseKey];
+
+            for (let i = 0; i < Coils.length; ++i) {
+                const pwr = phase ? Math.abs(phase.coilPowers[i]) : 0;
+                const cx = Coils[i].Offset * mmPx, cw = Coils[i].Width * mmPx, ch = mmPx * Coils[i].Height, cy = (tubeAreaH - ch) / 2;
+                ctx.globalAlpha = 0.22 + 0.78 * pwr; drawRect(cx, cy, cw, ch, '#EA3'); ctx.globalAlpha = 1.0;
+
+                const pct = Math.round(pwr * 100);
+                const coilAmp = Math.min(emSpecs.maxCurrentA, (pwr * params.voltage.value) / emSpecs.resistanceOhm);
+                drawTextWithBg(`К${i + 1}: ${pct}%`, cx + cw / 2, cy + ch + 14, pct === 0 ? '#737373' : '#fbbf24', 'rgba(30, 30, 30, 0.88)');
+                drawTextWithBg(`${coilAmp.toFixed(2)} А`, cx + cw / 2, cy + ch + 33, pct === 0 ? '#666666' : '#38bdf8', 'rgba(24, 24, 28, 0.88)');
+            }
+
+            drawRect(0, (tubeAreaH - mmPx * params.tubeOutHeight.value) / 2, W, mmPx * params.tubeOutHeight.value, '#CCC');
+            drawRect(0, (tubeAreaH - mmPx * params.tubeInHeight.value) / 2, W, mmPx * params.tubeInHeight.value, '#888');
+
+            const spacer = params.spacerWidth.value;
+            if (spacer > 0 && phase) {
+                const sh = mmPx * params.anchorsHeight.value, sy = (tubeAreaH - sh) / 2;
+                for (let i = 1; i < phase.anchors.length; i++) drawRect((phase.anchors[i].offset - spacer) * mmPx, sy, spacer * mmPx, sh, '#f97316');
+            }
+
+            const groups = phase ? phase.mergedAnchors : [];
+            for (let i = 0; i < groups.length; ++i) {
+                const g = groups[i], gx = g.offset * mmPx, gw = g.width * mmPx, gh = mmPx * g.height, gy = (tubeAreaH - gh) / 2;
+                drawRect(gx, gy, gw, gh, '#3ae');
+                const f = g.forceN ?? 0, textColor = f > 0.01 ? '#4ade80' : (f < -0.01 ? '#f87171' : '#e5e5e5');
+                const prefix = g.ids.length > 1 ? `[${g.ids.join('+')}] ` : '';
+                drawTextWithBg(`${prefix}${f > 0 ? '+' : ''}${f.toFixed(2)} Н`, gx + gw / 2, gy - 15, textColor);
+            }
+
+            if (activeCharts > 0) {
+                const chartsTop = tubeAreaH + 6, chartsTotalH = H - chartsTop - 6;
+                const singleChartH = (chartsTotalH - (activeCharts - 1) * 6) / activeCharts;
+                let curTop = chartsTop;
+                const outerCoilD = params.tubeOutHeight.value + 2 * params.coilWireSize.value * params.coilWireLayers.value;
+
+                if (showForceChart) {
+                    drawChartPanel({ x: 8, y: curTop, w: W - 16, h: singleChartH }, phaseKey, {
+                        title: 'ТЯГА ПРИВОДА (ср. ' + systemSummary.avgForceN.toFixed(2) + ' Н | удерж. ' + systemSummary.holdForceN.toFixed(2) + ' Н) vs ПУНКТИР: МЫШЦА Ø' + outerCoilD.toFixed(1) + '×' + params.tubeWidth.value + ' мм (ср. ' + systemSummary.avgMuscleForceN.toFixed(2) + ' Н)',
+                        unit: ' Н',
+                        series: [
+                            { getValue: p => p.muscleForceN, color: '#4ade80', dashed: true },
+                            { getValue: p => p.totalForceN, color: '#38bdf8', fill: 'rgba(56, 189, 248, 0.15)' }
+                        ]
+                    });
+                    curTop += singleChartH + 6;
+                }
+                if (showCurrentChart) {
+                    drawChartPanel({ x: 8, y: curTop, w: W - 16, h: singleChartH }, phaseKey, {
+                        title: 'ТОК ШИМ ' + params.pwmFreqKhz.value + ' кГц — Желтый: от БП (ср. ' + systemSummary.avgCurrentA.toFixed(2) + ' А) | Пунктир: в обмотках | Пульсации ΔI ≈ ' + emSpecs.maxRippleA.toFixed(2) + ' А',
+                        unit: ' А',
+                        series: [
+                            { getValue: p => p.coilsCurrentA, color: '#38bdf8', dashed: true },
+                            { getValue: p => p.supplyCurrentA, color: '#fbbf24', fill: 'rgba(251, 191, 36, 0.18)' }
+                        ]
+                    });
+                }
+            }
+            ctx.restore();
+        }
+
+        sldProgress.addEventListener('input', function () { applyPhase(parseInt(this.value, 10)); });
+        buildForm(); init(); resetParams(); buildAllPhases(); applyPhase(0);
+    </script>
+</body>
+</html>
+

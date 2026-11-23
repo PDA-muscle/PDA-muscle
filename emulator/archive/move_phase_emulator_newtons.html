@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Move Phase Emulator (Newtons)</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        #mainHolder {
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            grid-template-columns: 1fr;
+            height: 100dvh;
+            width: 100vw;
+            overflow: hidden;
+            position: absolute;
+            left: 0;
+            top: 0;
+            background-color: #0a0a0a;
+            font-family: sans-serif;
+        }
+
+        #paramsHolder {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(135px, max-content) 65px);
+            gap: 6px 14px;
+            padding: 10px 14px;
+            background-color: #262626;
+            color: #d4d4d4;
+            font-size: 13px;
+            align-items: center;
+            grid-row: 1;
+            grid-column: 1;
+            border-bottom: 1px solid #404040;
+        }
+
+        #paramsHolder label {
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        #paramsHolder input {
+            width: 100%;
+            padding: 3px 6px;
+            background-color: #383838;
+            color: #ffffff;
+            border: 1px solid #525252;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        #paramsHolder input:focus {
+            outline: none;
+            border-color: #38bdf8;
+        }
+
+        .cvsWrapper {
+            grid-row: 2;
+            grid-column: 1;
+            min-height: 0;
+            min-width: 0;
+            position: relative;
+        }
+
+        #cvsDisplay {
+            display: block;
+            background-color: #000000;
+            width: 100%;
+            height: 100%;
+        }
+
+        #resultsHolder {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            grid-row: 3;
+            grid-column: 1;
+            padding: 10px 14px;
+            background-color: #262626;
+            color: #e5e5e5;
+            border-top: 1px solid #404040;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+
+        .info-group {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 14px;
+        }
+
+        .slider-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .slider-row input[type="range"] {
+            flex: 1;
+            cursor: pointer;
+        }
+
+        button {
+            background-color: #383838;
+            color: #f5f5f5;
+            border: 1px solid #525252;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background-color 0.15s, border-color 0.15s;
+        }
+
+        button:hover {
+            background-color: #4a4a4a;
+        }
+
+        button.active {
+            background-color: #0284c7;
+            border-color: #38bdf8;
+            color: #ffffff;
+        }
+    </style>
+</head>
+<body>
+    <div id="mainHolder">
+        <div id="paramsHolder"></div>
+        <div class="cvsWrapper">
+            <canvas id="cvsDisplay"></canvas>
+        </div>
+        <div id="resultsHolder"></div>
+    </div>
+
+    <script>
+        const paramsHolder = document.getElementById('paramsHolder');
+        const cvsDisplay = document.getElementById('cvsDisplay');
+        const resultsHolder = document.getElementById('resultsHolder');
+        const cvsWrapper = document.querySelector('.cvsWrapper');
+        const ctx = cvsDisplay.getContext('2d');
+
+        const params = {
+            tubeWidth:      { value: 106.0, label: 'Длина трубки (мм)',   step: 1,    min: 10,   isInt: false },
+            tubeOutHeight:  { value: 6.0,   label: 'Внеш. D трубки (мм)', step: 0.1,  min: 1,    isInt: false },
+            tubeInHeight:   { value: 5.2,   label: 'Внутр. D трубки',     step: 0.1,  min: 1,    isInt: false },
+            coilsCount:     { value: 5,     label: 'Кол-во катушек',      step: 1,    min: 1,    isInt: true  },
+            coilWidth:      { value: 17,    label: 'Ширина катушки',      step: 0.5,  min: 1,    isInt: false },
+            coilWireSize:   { value: 0.18,  label: 'Диаметр провода',     step: 0.01, min: 0.01, isInt: false },
+            coilWireLayers: { value: 4,     label: 'Слоев намотки',       step: 1,    min: 1,    isInt: true  },
+            coilStep:       { value: 4,     label: 'Шаг катушек',         step: 0.5,  min: 0,    isInt: false },
+            coilOffset:     { value: 2,     label: 'Отступ катушек',      step: 0.5,  min: 0,    isInt: false },
+            anchorsHeight:  { value: 5,     label: 'Диаметр якоря',       step: 0.1,  min: 1,    isInt: false },
+            anchorsCount:   { value: 3,     label: 'Кол-во якорей',       step: 1,    min: 1,    isInt: true  },
+            anchorsOffset:  { value: 0,     label: 'Нач. отступ якоря',   step: 0.5,  min: 0,    isInt: false },
+            anchorsStep:    { value: 0.8,   label: 'Зазор меж якорями',   step: 0.1,  min: 0,    isInt: false },
+            anchorsWidth:   { value: 20.2,  label: 'Длина якоря',         step: 0.5,  min: 1,    isInt: false },
+            captureZone:    { value: 2.0,   label: 'Зона захвата (мм)',   step: 0.5,  min: 0,    isInt: false },
+            powerStepPct:   { value: 10,    label: 'Шаг мощности (%)',    step: 1,    min: 1,    max: 100, isInt: true },
+            voltage:        { value: 12.0,  label: 'Напряжение (В)',      step: 0.5,  min: 0.5,  isInt: false },
+            satTesla:       { value: 1.6,   label: 'Насыщение стали (Тл)',step: 0.1,  min: 0.2,  max: 2.5, isInt: false }
+        };
+
+        let Coils = [];
+        let Anchors = [];
+        let phasesData = {};
+        let emSpecs = {};
+        let showChart = false;
+
+        // UI Elements
+        const infoRow = document.createElement('div');
+        infoRow.className = 'info-row';
+
+        const statsContainer = document.createElement('div');
+        statsContainer.className = 'info-group';
+
+        const controlsContainer = document.createElement('div');
+        controlsContainer.className = 'info-group';
+
+        const btnToggleChart = document.createElement('button');
+        btnToggleChart.textContent = '📈 График суммарной тяги (Н)';
+
+        const sliderRow = document.createElement('div');
+        sliderRow.className = 'slider-row';
+
+        const btnPrev = document.createElement('button');
+        btnPrev.textContent = '◀';
+        btnPrev.title = 'Предыдущая фаза';
+
+        const sldProgress = document.createElement('input');
+        sldProgress.type = 'range';
+        sldProgress.min = 0;
+        sldProgress.step = 1;
+        sldProgress.value = 0;
+
+        const btnNext = document.createElement('button');
+        btnNext.textContent = '▶';
+        btnNext.title = 'Следующая фаза';
+
+        // Расчет электромагнитных параметров катушки из геометрии
+        function calculateEMSpecs() {
+            const wireD = params.coilWireSize.value;
+            const coilW = params.coilWidth.value;
+            const layers = params.coilWireLayers.value;
+            const tubeOutD = params.tubeOutHeight.value;
+            const anchorD = params.anchorsHeight.value;
+            const U = params.voltage.value;
+            const Bsat = params.satTesla.value;
+
+            // Витков в слое * кол-во слоев (коэф. укладки ~0.92)
+            const turnsPerLayer = Math.floor(coilW / wireD);
+            const totalTurns = Math.max(1, Math.round(turnsPerLayer * layers * 0.92));
+
+            // Средний диаметр витка (мм) и общая длина провода (м)
+            const windingThickness = wireD * layers;
+            const meanCoilD = tubeOutD + windingThickness;
+            const wireLengthM = (Math.PI * meanCoilD * totalTurns) / 1000;
+
+            // Площадь сечения медной жилы (мм^2) и сопротивление R (Ом)
+            const wireAreaMm2 = Math.PI * Math.pow(wireD / 2, 2);
+            const resistanceOhm = Math.max(0.05, (0.0175 * wireLengthM) / wireAreaMm2);
+
+            // Максимальный ток при 100% мощности (А) и ампер-витки
+            const maxCurrentA = U / resistanceOhm;
+            const maxAmpTurns = maxCurrentA * totalTurns;
+
+            // Площадь сечения сердечника (м^2)
+            const anchorRadiusM = (anchorD / 2) / 1000;
+            const anchorAreaM2 = Math.PI * anchorRadiusM * anchorRadiusM;
+
+            const mu0 = 4 * Math.PI * 1e-7;
+
+            // Индукция воздушного соленоида (Тл) при 100% токе: B0 = mu0 * (I * N) / L_coil
+            const coilLengthM = Math.max(0.001, coilW / 1000);
+            const airB = (mu0 * maxAmpTurns) / coilLengthM;
+
+            // Коэффициент эффективности магнитной цепи (учет радиального зазора трубки)
+            const radialGapMm = Math.max(0.1, (params.tubeInHeight.value - anchorD) / 2);
+            const gapEfficiency = 1 / (1 + radialGapMm * 0.45);
+
+            // Предельная сила при полном магнитном насыщении сердечника (Н)
+            const satForceN = ((Bsat * Bsat * anchorAreaM2) / (2 * mu0)) * gapEfficiency;
+
+            emSpecs = {
+                totalTurns,
+                resistanceOhm,
+                maxCurrentA,
+                maxAmpTurns,
+                anchorAreaM2,
+                mu0,
+                airB,
+                gapEfficiency,
+                satForceN,
+                Bsat,
+                anchorD
+            };
+        }
+
+
+        // Расчет силы в Ньютонах от одной катушки на один сердечник/кластер
+        function calcSingleCoilForceNewtons(coil, targetOffset, targetWidth, coilPower) {
+            if (!coilPower || coilPower === 0) return 0;
+
+            const coilCenter = coil.Offset + coil.Width / 2;
+            const targetCenter = targetOffset + targetWidth / 2;
+            const dx = coilCenter - targetCenter;
+
+            // Характерная полудлина взаимодействия
+            const sigma = ((coil.Width + targetWidth) / 2) * 0.65;
+            const ratio = dx / sigma;
+
+            // Непериодический профиль тяги: строго сохраняет знак dx (0 в центре, пик ±1 на входе, затухание вдали)
+            const geomFactor = ratio * Math.exp((1 - ratio * ratio) / 2);
+
+            // Ток в катушке пропорционален мощности (ШИМ / скважность)
+            const currentAmpTurns = emSpecs.maxAmpTurns * Math.abs(coilPower);
+
+            // Эффективная магнитная проницаемость цилиндрического сердечника (зависит от отношения L / D)
+            const aspect = Math.max(1, targetWidth / params.anchorsHeight.value);
+            const muEff = 1 + 4.2 * Math.pow(aspect, 0.85);
+
+            // Индукция воздушного соленоида, усиленная железным сердечником
+            const coilLengthM = Math.max(0.001, coil.Width / 1000);
+            const rawB = ((emSpecs.mu0 * currentAmpTurns) / coilLengthM) * muEff;
+
+            const Bsat = params.satTesla.value;
+            // Плавное насыщение (гиперболический тангенс) до порога Bsat
+            const effB = Bsat * Math.tanh(rawB / Bsat);
+
+            // Коэффициент эффективности магнитной цепи (учет радиального зазора трубки)
+            const radialGapMm = Math.max(0.1, (params.tubeInHeight.value - params.anchorsHeight.value) / 2);
+            const gapEfficiency = 1 / (1 + radialGapMm * 0.45);
+
+            // Максимальная амплитуда силы при данном токе (Н)
+            const maxForceAtPowerN = ((effB * effB * emSpecs.anchorAreaM2) / (2 * emSpecs.mu0)) * gapEfficiency;
+
+            return geomFactor * maxForceAtPowerN;
+        }
+
+
+        // Проверка: входит ли передний конец якоря в зону захвата катушки и не прошел ли центр якоря центр катушки
+        function getHandoverWeight(coil, group) {
+            const anchorFront = group.offset + group.width;
+            const anchorCenter = group.offset + group.width / 2;
+            const coilStart = coil.Offset;
+            const coilCenter = coil.Offset + coil.Width / 2;
+            const capture = params.captureZone.value;
+
+            // Катушка не включается, пока передний конец якоря не дошел до (coilStart - capture)
+            if (anchorFront < coilStart - capture) return 0;
+
+            // Катушка отключается, как только центр якоря прошел центр катушки (чтобы не тормозить назад)
+            if (anchorCenter >= coilCenter) return 0;
+
+            // Плавное уменьшение мощности при передаче сердечника ближе к центру катушки
+            const handoverStart = coilStart + coil.Width * 0.15;
+            if (anchorCenter <= handoverStart) {
+                return 1.0;
+            } else {
+                const progress = (anchorCenter - handoverStart) / (coilCenter - handoverStart);
+                return Math.max(0, 1.0 - progress);
+            }
+        }
+
+        function quantizePower(rawPower) {
+            const step = params.powerStepPct.value / 100;
+            if (step <= 0) return Math.max(0, Math.min(1, rawPower));
+            const quantized = Math.round(rawPower / step) * step;
+            return Math.max(0, Math.min(1, Number(quantized.toFixed(4))));
+        }
+
+        function mergeAnchors(phaseAnchors) {
+            const mergedGroups = [];
+            const EPSILON = 0.001;
+
+            for (let i = 0; i < phaseAnchors.length; i++) {
+                const curr = phaseAnchors[i];
+                if (mergedGroups.length === 0) {
+                    mergedGroups.push({
+                        ids: [curr.id],
+                        offset: curr.offset,
+                        width: curr.width,
+                        height: curr.height,
+                        forceN: 0
+                    });
+                } else {
+                    const lastGroup = mergedGroups[mergedGroups.length - 1];
+                    const lastEnd = lastGroup.offset + lastGroup.width;
+                    if (Math.abs(lastEnd - curr.offset) <= EPSILON) {
+                        lastGroup.ids.push(curr.id);
+                        lastGroup.width += curr.width;
+                    } else {
+                        mergedGroups.push({
+                            ids: [curr.id],
+                            offset: curr.offset,
+                            width: curr.width,
+                            height: curr.height,
+                            forceN: 0
+                        });
+                    }
+                }
+            }
+            return mergedGroups;
+        }
+
+        function recalculatePhase(phaseKey) {
+            const phase = phasesData[phaseKey];
+            if (!phase) return;
+
+            const groups = mergeAnchors(phase.anchors);
+            let totalForceN = 0;
+
+            groups.forEach(group => {
+                let netForceN = 0;
+                for (let c = 0; c < Coils.length; c++) {
+                    const pwr = phase.coilPowers[c] ?? 0;
+                    if (pwr > 0) {
+                        netForceN += calcSingleCoilForceNewtons(Coils[c], group.offset, group.width, pwr);
+                    }
+                }
+                group.forceN = Number(netForceN.toFixed(3));
+                totalForceN += netForceN;
+            });
+
+            phase.mergedAnchors = groups;
+            phase.totalSystemForceN = Number(totalForceN.toFixed(3));
+        }
+
+        function buildAndOptimizeAllPhases() {
+            calculateEMSpecs();
+            phasesData = {};
+            const maxStep = parseInt(sldProgress.max, 10);
+
+            for (let step = 0; step <= maxStep; step++) {
+                let moveLim = params.tubeWidth.value;
+                const phaseAnchors = new Array(Anchors.length);
+
+                for (let i = Anchors.length - 1; i >= 0; --i) {
+                    moveLim -= Anchors[i].Width;
+                    let pos = Anchors[i].StartOffset + step;
+                    if (pos > moveLim) pos = moveLim;
+
+                    phaseAnchors[i] = {
+                        id: Anchors[i].Id,
+                        offset: pos,
+                        width: Anchors[i].Width,
+                        height: Anchors[i].Height
+                    };
+                }
+
+                const groups = mergeAnchors(phaseAnchors);
+                const coilPowers = new Array(Coils.length).fill(0);
+
+                // Автоматический подбор мощности каждой катушки для максимальной тяги вправо (в Ньютонах)
+                for (let c = 0; c < Coils.length; c++) {
+                    const coil = Coils[c];
+                    let bestHandover = 0;
+                    let totalPositivePullN = 0;
+
+                    groups.forEach(g => {
+                        const hw = getHandoverWeight(coil, g);
+                        if (hw > 0) {
+                            const fN = calcSingleCoilForceNewtons(coil, g.offset, g.width, 1.0);
+                            if (fN > 0) {
+                                totalPositivePullN += fN;
+                                if (hw > bestHandover) bestHandover = hw;
+                            }
+                        } else {
+                            // Если якорь уже внутри/за центром катушки и катушка будет тормозить его назад
+                            const fN = calcSingleCoilForceNewtons(coil, g.offset, g.width, 1.0);
+                            if (fN < -0.02) {
+                                totalPositivePullN += fN;
+                            }
+                        }
+                    });
+
+                    if (bestHandover > 0 && totalPositivePullN > 0) {
+                        coilPowers[c] = quantizePower(bestHandover);
+                    } else {
+                        coilPowers[c] = 0;
+                    }
+                }
+
+                phasesData[step] = {
+                    offset: step,
+                    coilPowers: coilPowers,
+                    anchors: phaseAnchors,
+                    mergedAnchors: [],
+                    totalSystemForceN: 0
+                };
+
+                recalculatePhase(step);
+            }
+        }
+
+        function buildForm() {
+            paramsHolder.innerHTML = '';
+            for (const key in params) {
+                const item = params[key];
+                const label = document.createElement('label');
+                label.textContent = item.label + ':';
+                label.htmlFor = 'param_' + key;
+
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.id = 'param_' + key;
+                input.value = item.value;
+                input.step = item.step;
+                if (item.min !== undefined) input.min = item.min;
+                if (item.max !== undefined) input.max = item.max;
+
+                input.addEventListener('input', function () {
+                    const parsed = item.isInt ? parseInt(this.value, 10) : parseFloat(this.value);
+                    if (!isNaN(parsed)) {
+                        params[key].value = parsed;
+                        resetGeometry();
+                        buildAndOptimizeAllPhases();
+                        applyPhase(parseInt(sldProgress.value, 10));
+                    }
+                });
+
+                paramsHolder.appendChild(label);
+                paramsHolder.appendChild(input);
+            }
+        }
+
+        function init() {
+            controlsContainer.appendChild(btnToggleChart);
+            infoRow.appendChild(statsContainer);
+            infoRow.appendChild(controlsContainer);
+
+            sliderRow.appendChild(btnPrev);
+            sliderRow.appendChild(sldProgress);
+            sliderRow.appendChild(btnNext);
+
+            resultsHolder.appendChild(infoRow);
+            resultsHolder.appendChild(sliderRow);
+
+            btnToggleChart.addEventListener('click', () => {
+                showChart = !showChart;
+                btnToggleChart.classList.toggle('active', showChart);
+                draw(parseInt(sldProgress.value, 10));
+            });
+
+            btnPrev.addEventListener('click', () => {
+                const val = Math.max(0, parseInt(sldProgress.value, 10) - 1);
+                sldProgress.value = val;
+                applyPhase(val);
+            });
+
+            btnNext.addEventListener('click', () => {
+                const val = Math.min(parseInt(sldProgress.max, 10), parseInt(sldProgress.value, 10) + 1);
+                sldProgress.value = val;
+                applyPhase(val);
+            });
+
+            sldProgress.addEventListener('input', function () {
+                applyPhase(parseInt(this.value, 10));
+            });
+
+            new ResizeObserver(entries => {
+                const { width, height } = entries[0].contentRect;
+                const dpr = window.devicePixelRatio || 1;
+                cvsDisplay.width = Math.floor(width * dpr);
+                cvsDisplay.height = Math.floor(height * dpr);
+                draw(parseInt(sldProgress.value, 10));
+            }).observe(cvsWrapper);
+        }
+
+        function resetGeometry() {
+            Coils = [];
+            Anchors = [];
+
+            const maxOffset = params.tubeWidth.value - params.anchorsCount.value * params.anchorsWidth.value;
+            sldProgress.max = Math.max(0, Math.ceil(maxOffset));
+            if (parseInt(sldProgress.value, 10) > sldProgress.max) {
+                sldProgress.value = sldProgress.max;
+            }
+
+            const coilH = params.tubeOutHeight.value + params.coilWireSize.value * params.coilWireLayers.value * 2;
+            let offset = params.coilOffset.value;
+            for (let i = 0; i < params.coilsCount.value; ++i) {
+                Coils.push({
+                    Id: i + 1,
+                    Height: coilH,
+                    Width: params.coilWidth.value,
+                    Offset: offset
+                });
+                offset += params.coilWidth.value + params.coilStep.value;
+            }
+
+            offset = params.anchorsOffset.value;
+            for (let i = 0; i < params.anchorsCount.value; ++i) {
+                Anchors.push({
+                    Id: i + 1,
+                    Height: params.anchorsHeight.value,
+                    Width: params.anchorsWidth.value,
+                    Offset: offset,
+                    StartOffset: offset
+                });
+                offset += params.anchorsWidth.value + params.anchorsStep.value;
+            }
+        }
+
+        function applyPhase(phaseKey) {
+            const phase = phasesData[phaseKey];
+            if (!phase) return;
+
+            for (let i = 0; i < Anchors.length; i++) {
+                Anchors[i].Offset = phase.anchors[i].offset;
+            }
+
+            // Подсчет средней тяги по всем фазам для удобства сравнения конфигураций
+            const allKeys = Object.keys(phasesData);
+            const avgForceN = allKeys.reduce((acc, k) => acc + phasesData[k].totalSystemForceN, 0) / Math.max(1, allKeys.length);
+
+            const anchorsText = phase.mergedAnchors.map(g => {
+                const arrow = g.forceN > 0.005 ? '→' : (g.forceN < -0.005 ? '←' : '•');
+                const sign = g.forceN > 0 ? '+' : '';
+                const name = g.ids.length > 1 ? `Сборка #${g.ids.join('+')}` : `Якорь #${g.ids}`;
+                const color = g.forceN > 0.005 ? '#4ade80' : (g.forceN < -0.005 ? '#f87171' : '#e5e5e5');
+                return `<span>${name}: <b style="color:${color}">${sign}${g.forceN.toFixed(2)} Н</b> ${arrow}</span>`;
+            }).join(' <span>|</span> ');
+
+            const totColor = phase.totalSystemForceN > 0.005 ? '#4ade80' : (phase.totalSystemForceN < -0.005 ? '#f87171' : '#e5e5e5');
+            const totSign = phase.totalSystemForceN > 0 ? '+' : '';
+
+            statsContainer.innerHTML = `
+                <span>Фаза: <b>${phaseKey}</b> / ${sldProgress.max}</span>
+                ${anchorsText}
+                <span>Сумма: <b style="color:${totColor}">${totSign}${phase.totalSystemForceN.toFixed(2)} Н</b></span>
+                <span style="color:#a3a3a3;">(Средн. за ход: <b style="color:#38bdf8">${avgForceN.toFixed(2)} Н</b> | Катушка: ${emSpecs.totalTurns} вит., ${emSpecs.resistanceOhm.toFixed(1)} Ом, I<sub>max</sub>=${emSpecs.maxCurrentA.toFixed(2)} А)</span>
+            `;
+
+            draw(phaseKey);
+        }
+
+        function drawRect(x, y, width, height, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, width, height);
+        }
+
+        function drawTextWithBg(text, x, y, textColor, bgColor = 'rgba(38, 38, 38, 0.9)', paddingX = 6, paddingY = 3) {
+            ctx.save();
+            ctx.font = 'bold 12px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            const textWidth = ctx.measureText(text).width;
+            const textHeight = 14;
+            const boxWidth = textWidth + paddingX * 2;
+            const boxHeight = textHeight + paddingY * 2;
+
+            ctx.fillStyle = bgColor;
+            ctx.beginPath();
+            ctx.roundRect(x - boxWidth / 2, y - boxHeight / 2, boxWidth, boxHeight, 4);
+            ctx.fill();
+
+            ctx.fillStyle = textColor;
+            ctx.fillText(text, x, y);
+            ctx.restore();
+        }
+
+        function drawForceChart(logicalWidth, logicalHeight, currentPhaseKey) {
+            const chartTop = logicalHeight * 0.56;
+            const chartBottom = logicalHeight - 28;
+            const chartLeft = 56;
+            const chartRight = logicalWidth - 24;
+            const chartW = chartRight - chartLeft;
+            const chartH = chartBottom - chartTop;
+
+            if (chartH < 40 || chartW < 80) return;
+
+            const keys = Object.keys(phasesData).map(Number).sort((a, b) => a - b);
+            if (keys.length === 0) return;
+
+            const forces = keys.map(k => phasesData[k].totalSystemForceN);
+            const maxVal = Math.max(0.5, ...forces.map(Math.abs));
+
+            // Фон области графика
+            ctx.fillStyle = 'rgba(24, 24, 27, 0.92)';
+            ctx.strokeStyle = '#3f3f46';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(chartLeft - 44, chartTop - 16, chartW + 58, chartH + 38, 6);
+            ctx.fill();
+            ctx.stroke();
+
+            // Нулевая линия
+            const zeroY = chartBottom - (0 / maxVal) * chartH;
+            ctx.strokeStyle = '#52525b';
+            ctx.beginPath();
+            ctx.moveTo(chartLeft, zeroY);
+            ctx.lineTo(chartRight, zeroY);
+            ctx.stroke();
+
+            // Подписи оси Y (Ньютоны)
+            ctx.fillStyle = '#a1a1aa';
+            ctx.font = '11px monospace';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(`${maxVal.toFixed(2)} Н`, chartLeft - 6, chartTop);
+            ctx.fillText(`${(maxVal / 2).toFixed(2)} Н`, chartLeft - 6, chartTop + chartH / 2);
+            ctx.fillText(`0.00 Н`, chartLeft - 6, chartBottom);
+
+            // Кривая суммарной тяги (Н)
+            ctx.strokeStyle = '#38bdf8';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            keys.forEach((k, idx) => {
+                const x = chartLeft + (idx / Math.max(1, keys.length - 1)) * chartW;
+                const val = Math.max(0, phasesData[k].totalSystemForceN);
+                const y = chartBottom - (val / maxVal) * chartH;
+                if (idx === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+
+            // Заливка под кривой
+            ctx.lineTo(chartRight, chartBottom);
+            ctx.lineTo(chartLeft, chartBottom);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(56, 189, 248, 0.15)';
+            ctx.fill();
+
+            // Вертикальный маркер текущей фазы
+            const curIdx = keys.indexOf(currentPhaseKey);
+            if (curIdx !== -1) {
+                const curX = chartLeft + (curIdx / Math.max(1, keys.length - 1)) * chartW;
+                const curVal = Math.max(0, phasesData[currentPhaseKey].totalSystemForceN);
+                const curY = chartBottom - (curVal / maxVal) * chartH;
+
+                ctx.strokeStyle = '#fbbf24';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 3]);
+                ctx.beginPath();
+                ctx.moveTo(curX, chartTop);
+                ctx.lineTo(curX, chartBottom);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.fillStyle = '#fbbf24';
+                ctx.beginPath();
+                ctx.arc(curX, curY, 4.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function draw(phaseKey = 0) {
+            const dpr = window.devicePixelRatio || 1;
+            const logicalWidth = cvsDisplay.width / dpr;
+            const logicalHeight = cvsDisplay.height / dpr;
+
+            ctx.save();
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+
+            const mmPx = logicalWidth / params.tubeWidth.value;
+            const phase = phasesData[phaseKey];
+            const centerY = showChart ? logicalHeight * 0.28 : logicalHeight * 0.5;
+
+            // 1. Катушки и их текущая мощность снизу
+            for (let i = 0; i < Coils.length; ++i) {
+                const pwr = phase ? Math.abs(phase.coilPowers[i]) : 0;
+                const cx = Coils[i].Offset * mmPx;
+                const cw = Coils[i].Width * mmPx;
+                const ch = mmPx * Coils[i].Height;
+                const cy = centerY - ch / 2;
+
+                ctx.globalAlpha = 0.2 + 0.8 * pwr;
+                drawRect(cx, cy, cw, ch, '#EA3');
+                ctx.globalAlpha = 1.0;
+
+                const pct = Math.round(pwr * 100);
+                const pwrColor = pct === 0 ? '#737373' : '#fbbf24';
+                drawTextWithBg(`К${i + 1}: ${pct}%`, cx + cw / 2, cy + ch + 16, pwrColor, 'rgba(30, 30, 30, 0.88)');
+            }
+
+            // 2. Трубка
+            drawRect(0, centerY - (mmPx * params.tubeOutHeight.value) / 2, logicalWidth, mmPx * params.tubeOutHeight.value, '#CCC');
+            drawRect(0, centerY - (mmPx * params.tubeInHeight.value) / 2, logicalWidth, mmPx * params.tubeInHeight.value, '#888');
+
+            // 3. Якоря (с силой в Ньютонах над каждым сердечником/сборкой)
+            const groups = phase ? phase.mergedAnchors : [];
+            for (let i = 0; i < groups.length; ++i) {
+                const g = groups[i];
+                const gx = g.offset * mmPx;
+                const gw = g.width * mmPx;
+                const gh = mmPx * g.height;
+                const gy = centerY - gh / 2;
+
+                drawRect(gx, gy, gw, gh, '#3ae');
+
+                if (g.ids.length > 1) {
+                    ctx.strokeStyle = 'rgba(15, 23, 42, 0.55)';
+                    ctx.lineWidth = 1;
+                    let segX = gx;
+                    for (let k = 0; k < g.ids.length - 1; k++) {
+                        const segAnchor = Anchors.find(a => a.Id === g.ids[k]);
+                        segX += segAnchor.Width * mmPx;
+                        ctx.beginPath();
+                        ctx.moveTo(segX, gy);
+                        ctx.lineTo(segX, gy + gh);
+                        ctx.stroke();
+                    }
+                }
+
+                const f = g.forceN ?? 0;
+                const textColor = f > 0.005 ? '#4ade80' : (f < -0.005 ? '#f87171' : '#e5e5e5');
+                const prefix = g.ids.length > 1 ? `[${g.ids.join('+')}] ` : '';
+                const labelText = `${prefix}${f > 0 ? '+' : ''}${f.toFixed(2)} Н`;
+
+                drawTextWithBg(labelText, gx + gw / 2, gy - 16, textColor, 'rgba(38, 38, 38, 0.92)');
+            }
+
+            // 4. График суммарной тяги (если включен)
+            if (showChart) {
+                drawForceChart(logicalWidth, logicalHeight, phaseKey);
+            }
+
+            ctx.restore();
+        }
+
+        // Запуск
+        buildForm();
+        init();
+        resetGeometry();
+        buildAndOptimizeAllPhases();
+        applyPhase(0);
+    </script>
+</body>
+</html>
