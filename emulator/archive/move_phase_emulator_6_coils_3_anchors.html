@@ -123,22 +123,26 @@
         const ctx = cvsDisplay.getContext('2d');
 
         const params = {
-            tubeWidth:      { value: 106.0, label: 'Длина трубки (мм)',    step: 1,    min: 20,   isInt: false },
+            tubeWidth: { value: 120.0, label: 'Длина трубки (мм)', step: 1, min: 20, isInt: false },
+            coilsCount: { value: 6, label: 'Кол-во катушек', step: 1, min: 1, isInt: true },
+            coilWidth: { value: 13, label: 'Ширина катушки (мм)', step: 0.5, min: 2, isInt: false },
+            coilStep: { value: 4, label: 'Шаг катушек (мм)', step: 0.5, min: 0, isInt: false },
+            coilOffset: { value: 8, label: 'Отступ катушек (мм)', step: 0.5, min: 0, isInt: false },
+            anchorsWidth: { value: 16.0, label: 'Длина якоря (мм)', step: 0.5, min: 2, isInt: false },
+            spacerWidth: { value: 15, label: 'Прокладка (мм)', step: 0.5, min: 0, isInt: false },
+            
+            
+
             tubeOutHeight:  { value: 6.0,   label: 'Внеш. D трубки (мм)',  step: 0.1,  min: 2,    isInt: false },
             tubeInHeight:   { value: 5.2,   label: 'Внутр. D трубки (мм)', step: 0.1,  min: 1.5,  isInt: false },
-            coilsCount:     { value: 5,     label: 'Кол-во катушек',       step: 1,    min: 1,    isInt: true  },
-            coilWidth:      { value: 17,    label: 'Ширина катушки (мм)',  step: 0.5,  min: 2,    isInt: false },
             coilWireSize:   { value: 0.18,  label: 'Диаметр провода (мм)', step: 0.01, min: 0.05, isInt: false },
             coilWireLayers: { value: 4,     label: 'Слоев намотки',       step: 1,    min: 1,    isInt: true  },
             maxOuterRadius: { value: 4.0,   label: 'Макс. наружный радиус (мм)', step: 0.1, min: 3.0, isInt: false },
-            coilStep:       { value: 4,     label: 'Шаг катушек (мм)',     step: 0.5,  min: 0,    isInt: false },
-            coilOffset:     { value: 3,     label: 'Отступ катушек (мм)',  step: 0.5,  min: 0,    isInt: false },
+            
             anchorsHeight:  { value: 5.0,   label: 'Диаметр якоря (мм)',   step: 0.1,  min: 1,    isInt: false },
             anchorsCount:   { value: 3,     label: 'Кол-во якорей',        step: 1,    min: 1,    isInt: true  },
             anchorsOffset:  { value: 0,     label: 'Нач. отступ якоря (мм)',step: 0.5, min: 0,    isInt: false },
             anchorsStep:    { value: 0,     label: 'Нач. зазор якорей (мм)',step: 0.5, min: 0,    isInt: false },
-            spacerWidth:    { value: 2.0,   label: 'Прокладка (мм)',       step: 0.5,  min: 0,    isInt: false },
-            anchorsWidth:   { value: 18.0,  label: 'Длина якоря (мм)',     step: 0.5,  min: 2,    isInt: false },
             voltage:        { value: 12.0,  label: 'Напряжение (В)',       step: 0.5,  min: 1,    isInt: false },
             maxCoilCurrent: { value: 3.3,   label: 'Макс. ток катушки (А)', step: 0.1,  min: 0.1,  max: 10, isInt: false },
             satTesla:       { value: 1.4,   label: 'Насыщение стали (Тл)', step: 0.1,  min: 0.2,  isInt: false },
